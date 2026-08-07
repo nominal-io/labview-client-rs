@@ -39,12 +39,20 @@ macro_rules! handle_registry {
 
             /// Store `value` and return its new handle. Never returns 0.
             pub(crate) fn insert(value: $ty) -> i32 {
-                let handle = crate::handles::next_handle();
-                Self::map()
-                    .lock()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner())
-                    .insert(handle, std::sync::Arc::new(value));
-                handle
+                let value = std::sync::Arc::new(value);
+                loop {
+                    let handle = crate::handles::next_handle();
+                    let mut map = Self::map()
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                    // Occupied only after the shared counter wraps (2^31
+                    // allocations) AND lands on a still-live handle — take
+                    // the next number instead of silently replacing it.
+                    if let std::collections::hash_map::Entry::Vacant(slot) = map.entry(handle) {
+                        slot.insert(value);
+                        return handle;
+                    }
+                }
             }
 
             /// Look up a handle. `None` if it was never issued or already freed.
@@ -91,10 +99,20 @@ pub(crate) use {handle_registry, lookup_handle};
 
 /// One counter shared by every registry, so a handle value can never be valid
 /// in two registries at once — using an asset handle as a client handle fails
-/// loudly instead of silently resolving to the wrong object.
+/// loudly instead of silently resolving to the wrong object. (After the
+/// counter wraps — 2^31 allocations — that cross-registry guarantee weakens
+/// to "practically always"; per-registry collision safety is preserved by
+/// the vacant-slot check in `insert`.)
+///
+/// Wraps from `i32::MAX` back to 1, never issuing 0 (reserved as
+/// "null"/"absent") or negatives.
 pub(crate) fn next_handle() -> i32 {
-    static NEXT: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(1);
-    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    use std::sync::atomic::{AtomicI32, Ordering};
+    static NEXT: AtomicI32 = AtomicI32::new(1);
+    NEXT.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+        Some(if current == i32::MAX { 1 } else { current + 1 })
+    })
+    .expect("fetch_update closure always returns Some")
 }
 
 // A list of handles is itself an opaque object behind a handle — this is how

@@ -8,7 +8,9 @@
 //! maps upstream, so getters iterate keys in sorted order — indices are
 //! stable and `_key_at(i)` / `_value_at(i)` always describe the same entry.
 
+use std::collections::HashMap;
 use std::os::raw::c_char;
+use std::sync::Mutex;
 
 use nominal::core::{Asset, AssetCreate, AssetQuery, AssetUpdate, DataSource};
 
@@ -262,6 +264,396 @@ pub extern "C" fn nominal_asset_update(
                 0
             }
             Err(err) => fail_sdk(err),
+        }
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Staging handles for create/update with labels and properties
+//
+// A C string array (char**) has no LabVIEW representation, so collections
+// arrive one string per call: _begin returns a staging handle, _add/_set
+// calls accumulate onto it, _commit fires the API request. Commit does NOT
+// free the staging handle — every handle is freed explicitly, uniformly.
+// ---------------------------------------------------------------------------
+
+/// Accumulated fields for an asset-create request (plain FFI-side struct —
+/// the upstream `AssetCreate` builder is constructed only at commit).
+pub(crate) struct AssetCreateParams {
+    name: String,
+    description: Option<String>,
+    labels: Vec<String>,
+    properties: HashMap<String, String>,
+}
+
+handle_registry!(AssetCreateStagingHandle, Mutex<AssetCreateParams>);
+
+/// Starts staging an asset-create request with the (required) name. Add
+/// optional fields with the `nominal_asset_create_set_*` / `_add_*` calls,
+/// then fire it with `nominal_asset_create_commit`. Free with
+/// `nominal_asset_create_free` (commit does not free).
+#[no_mangle]
+pub extern "C" fn nominal_asset_create_begin(name: *const c_char, out_staging: *mut i32) -> i32 {
+    guard(|| {
+        let name = match read_required_str(name, "name") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if name.is_empty() {
+            return fail(NominalErrorCode::InvalidArgument, "name must not be empty");
+        }
+        if out_staging.is_null() {
+            return fail(
+                NominalErrorCode::NullArgument,
+                "out_staging must not be null",
+            );
+        }
+        let params = AssetCreateParams {
+            name,
+            description: None,
+            labels: Vec::new(),
+            properties: HashMap::new(),
+        };
+        // SAFETY: out_staging checked non-null above; caller owns it.
+        unsafe { *out_staging = AssetCreateStagingHandle::insert(Mutex::new(params)) };
+        0
+    })
+}
+
+/// Sets the description on a staged create (overwrites any previous value;
+/// empty clears it).
+#[no_mangle]
+pub extern "C" fn nominal_asset_create_set_description(
+    staging: i32,
+    description: *const c_char,
+) -> i32 {
+    guard(|| {
+        let staging = lookup_handle!(AssetCreateStagingHandle, staging);
+        let description = match read_optional_str(description, "description") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        staging
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .description = description;
+        0
+    })
+}
+
+/// Adds one label to a staged create (duplicates are collapsed server-side).
+#[no_mangle]
+pub extern "C" fn nominal_asset_create_add_label(staging: i32, label: *const c_char) -> i32 {
+    guard(|| {
+        let staging = lookup_handle!(AssetCreateStagingHandle, staging);
+        let label = match read_required_str(label, "label") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if label.is_empty() {
+            return fail(NominalErrorCode::InvalidArgument, "label must not be empty");
+        }
+        staging
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .labels
+            .push(label);
+        0
+    })
+}
+
+/// Sets one property on a staged create (same key overwrites).
+#[no_mangle]
+pub extern "C" fn nominal_asset_create_set_property(
+    staging: i32,
+    key: *const c_char,
+    value: *const c_char,
+) -> i32 {
+    guard(|| {
+        let staging = lookup_handle!(AssetCreateStagingHandle, staging);
+        let key = match read_required_str(key, "key") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if key.is_empty() {
+            return fail(NominalErrorCode::InvalidArgument, "key must not be empty");
+        }
+        let value = match read_required_str(value, "value") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        staging
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .properties
+            .insert(key, value);
+        0
+    })
+}
+
+/// Creates the staged asset, writing the new asset's handle to `out_asset`
+/// (free with `nominal_asset_free`). The staging handle stays valid — free it
+/// with `nominal_asset_create_free`, or commit it again for another asset.
+#[no_mangle]
+pub extern "C" fn nominal_asset_create_commit(
+    client: i32,
+    staging: i32,
+    out_asset: *mut i32,
+) -> i32 {
+    guard(|| {
+        let client = lookup_handle!(ClientHandle, client);
+        let staging = lookup_handle!(AssetCreateStagingHandle, staging);
+        if out_asset.is_null() {
+            return fail(NominalErrorCode::NullArgument, "out_asset must not be null");
+        }
+
+        let create = {
+            let params = staging
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let mut create = AssetCreate::new(params.name.clone());
+            if let Some(description) = &params.description {
+                create = create.description(description.clone());
+            }
+            if !params.labels.is_empty() {
+                create = create.labels(params.labels.clone());
+            }
+            if !params.properties.is_empty() {
+                create = create.properties(params.properties.clone());
+            }
+            create
+        };
+
+        match block_on(client.assets().create(create)) {
+            Ok(asset) => {
+                // SAFETY: out_asset checked non-null above; caller owns it.
+                unsafe { *out_asset = AssetHandle::insert(asset) };
+                0
+            }
+            Err(err) => fail_sdk(err),
+        }
+    })
+}
+
+/// Frees an asset-create staging handle. Freeing twice returns an error.
+#[no_mangle]
+pub extern "C" fn nominal_asset_create_free(staging: i32) -> i32 {
+    guard(|| {
+        if AssetCreateStagingHandle::remove(staging) {
+            0
+        } else {
+            fail(
+                NominalErrorCode::InvalidHandle,
+                format!("invalid asset-create staging handle: {staging}"),
+            )
+        }
+    })
+}
+
+/// Accumulated fields for an asset-update request. `None` = leave that field
+/// untouched; `Some` = replace it entirely (upstream semantics).
+#[derive(Default)]
+pub(crate) struct AssetUpdateParams {
+    name: Option<String>,
+    description: Option<String>,
+    labels: Option<Vec<String>>,
+    properties: Option<HashMap<String, String>>,
+}
+
+handle_registry!(AssetUpdateStagingHandle, Mutex<AssetUpdateParams>);
+
+/// Starts staging an asset update. Only fields set via the
+/// `nominal_asset_update_set_*` / `_add_*` calls are changed at commit; the
+/// rest remain untouched. Free with `nominal_asset_update_free`.
+#[no_mangle]
+pub extern "C" fn nominal_asset_update_begin(out_staging: *mut i32) -> i32 {
+    guard(|| {
+        if out_staging.is_null() {
+            return fail(
+                NominalErrorCode::NullArgument,
+                "out_staging must not be null",
+            );
+        }
+        // SAFETY: out_staging checked non-null above; caller owns it.
+        unsafe {
+            *out_staging =
+                AssetUpdateStagingHandle::insert(Mutex::new(AssetUpdateParams::default()))
+        };
+        0
+    })
+}
+
+/// Stages a new name.
+#[no_mangle]
+pub extern "C" fn nominal_asset_update_set_name(staging: i32, name: *const c_char) -> i32 {
+    guard(|| {
+        let staging = lookup_handle!(AssetUpdateStagingHandle, staging);
+        let name = match read_required_str(name, "name") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if name.is_empty() {
+            return fail(NominalErrorCode::InvalidArgument, "name must not be empty");
+        }
+        staging
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .name = Some(name);
+        0
+    })
+}
+
+/// Stages a new description (empty clears the description).
+#[no_mangle]
+pub extern "C" fn nominal_asset_update_set_description(
+    staging: i32,
+    description: *const c_char,
+) -> i32 {
+    guard(|| {
+        let staging = lookup_handle!(AssetUpdateStagingHandle, staging);
+        let description = match read_required_str(description, "description") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        staging
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .description = Some(description);
+        0
+    })
+}
+
+/// Adds one label to the staged update. NOTE: touching labels at all means
+/// the commit REPLACES the asset's entire label set with exactly the labels
+/// accumulated here (upstream semantics) — to keep existing labels, add them
+/// too.
+#[no_mangle]
+pub extern "C" fn nominal_asset_update_add_label(staging: i32, label: *const c_char) -> i32 {
+    guard(|| {
+        let staging = lookup_handle!(AssetUpdateStagingHandle, staging);
+        let label = match read_required_str(label, "label") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if label.is_empty() {
+            return fail(NominalErrorCode::InvalidArgument, "label must not be empty");
+        }
+        staging
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .labels
+            .get_or_insert_with(Vec::new)
+            .push(label);
+        0
+    })
+}
+
+/// Sets one property on the staged update (same key overwrites). NOTE: same
+/// replace semantics as labels — touching properties at all means the commit
+/// replaces the asset's entire property map with the ones accumulated here.
+#[no_mangle]
+pub extern "C" fn nominal_asset_update_set_property(
+    staging: i32,
+    key: *const c_char,
+    value: *const c_char,
+) -> i32 {
+    guard(|| {
+        let staging = lookup_handle!(AssetUpdateStagingHandle, staging);
+        let key = match read_required_str(key, "key") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if key.is_empty() {
+            return fail(NominalErrorCode::InvalidArgument, "key must not be empty");
+        }
+        let value = match read_required_str(value, "value") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        staging
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .properties
+            .get_or_insert_with(HashMap::new)
+            .insert(key, value);
+        0
+    })
+}
+
+/// Applies the staged update to the asset with the given RID, writing a
+/// handle to the updated asset to `out_asset` (free with
+/// `nominal_asset_free`). At least one field must have been staged. The
+/// staging handle stays valid — free it with `nominal_asset_update_free`.
+#[no_mangle]
+pub extern "C" fn nominal_asset_update_commit(
+    client: i32,
+    rid: *const c_char,
+    staging: i32,
+    out_asset: *mut i32,
+) -> i32 {
+    guard(|| {
+        let client = lookup_handle!(ClientHandle, client);
+        let staging = lookup_handle!(AssetUpdateStagingHandle, staging);
+        let rid = match read_required_str(rid, "rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if out_asset.is_null() {
+            return fail(NominalErrorCode::NullArgument, "out_asset must not be null");
+        }
+
+        let update = {
+            let params = staging
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if params.name.is_none()
+                && params.description.is_none()
+                && params.labels.is_none()
+                && params.properties.is_none()
+            {
+                return fail(
+                    NominalErrorCode::InvalidArgument,
+                    "staged update has no fields set",
+                );
+            }
+            let mut update = AssetUpdate::new();
+            if let Some(name) = &params.name {
+                update = update.name(name.clone());
+            }
+            if let Some(description) = &params.description {
+                update = update.description(description.clone());
+            }
+            if let Some(labels) = &params.labels {
+                update = update.labels(labels.clone());
+            }
+            if let Some(properties) = &params.properties {
+                update = update.properties(properties.clone());
+            }
+            update
+        };
+
+        match block_on(client.assets().update(&rid, update)) {
+            Ok(asset) => {
+                // SAFETY: out_asset checked non-null above; caller owns it.
+                unsafe { *out_asset = AssetHandle::insert(asset) };
+                0
+            }
+            Err(err) => fail_sdk(err),
+        }
+    })
+}
+
+/// Frees an asset-update staging handle. Freeing twice returns an error.
+#[no_mangle]
+pub extern "C" fn nominal_asset_update_free(staging: i32) -> i32 {
+    guard(|| {
+        if AssetUpdateStagingHandle::remove(staging) {
+            0
+        } else {
+            fail(
+                NominalErrorCode::InvalidHandle,
+                format!("invalid asset-update staging handle: {staging}"),
+            )
         }
     })
 }

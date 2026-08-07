@@ -185,6 +185,90 @@ int32_t nominal_asset_update(int32_t client,
                              int32_t *out_asset);
 
 /*
+ Starts staging an asset-create request with the (required) name. Add
+ optional fields with the `nominal_asset_create_set_*` / `_add_*` calls,
+ then fire it with `nominal_asset_create_commit`. Free with
+ `nominal_asset_create_free` (commit does not free).
+ */
+int32_t nominal_asset_create_begin(const char *name, int32_t *out_staging);
+
+/*
+ Sets the description on a staged create (overwrites any previous value;
+ empty clears it).
+ */
+int32_t nominal_asset_create_set_description(int32_t staging, const char *description);
+
+/*
+ Adds one label to a staged create (duplicates are collapsed server-side).
+ */
+int32_t nominal_asset_create_add_label(int32_t staging, const char *label);
+
+/*
+ Sets one property on a staged create (same key overwrites).
+ */
+int32_t nominal_asset_create_set_property(int32_t staging, const char *key, const char *value);
+
+/*
+ Creates the staged asset, writing the new asset's handle to `out_asset`
+ (free with `nominal_asset_free`). The staging handle stays valid — free it
+ with `nominal_asset_create_free`, or commit it again for another asset.
+ */
+int32_t nominal_asset_create_commit(int32_t client, int32_t staging, int32_t *out_asset);
+
+/*
+ Frees an asset-create staging handle. Freeing twice returns an error.
+ */
+int32_t nominal_asset_create_free(int32_t staging);
+
+/*
+ Starts staging an asset update. Only fields set via the
+ `nominal_asset_update_set_*` / `_add_*` calls are changed at commit; the
+ rest remain untouched. Free with `nominal_asset_update_free`.
+ */
+int32_t nominal_asset_update_begin(int32_t *out_staging);
+
+/*
+ Stages a new name.
+ */
+int32_t nominal_asset_update_set_name(int32_t staging, const char *name);
+
+/*
+ Stages a new description (empty clears the description).
+ */
+int32_t nominal_asset_update_set_description(int32_t staging, const char *description);
+
+/*
+ Adds one label to the staged update. NOTE: touching labels at all means
+ the commit REPLACES the asset's entire label set with exactly the labels
+ accumulated here (upstream semantics) — to keep existing labels, add them
+ too.
+ */
+int32_t nominal_asset_update_add_label(int32_t staging, const char *label);
+
+/*
+ Sets one property on the staged update (same key overwrites). NOTE: same
+ replace semantics as labels — touching properties at all means the commit
+ replaces the asset's entire property map with the ones accumulated here.
+ */
+int32_t nominal_asset_update_set_property(int32_t staging, const char *key, const char *value);
+
+/*
+ Applies the staged update to the asset with the given RID, writing a
+ handle to the updated asset to `out_asset` (free with
+ `nominal_asset_free`). At least one field must have been staged. The
+ staging handle stays valid — free it with `nominal_asset_update_free`.
+ */
+int32_t nominal_asset_update_commit(int32_t client,
+                                    const char *rid,
+                                    int32_t staging,
+                                    int32_t *out_asset);
+
+/*
+ Frees an asset-update staging handle. Freeing twice returns an error.
+ */
+int32_t nominal_asset_update_free(int32_t staging);
+
+/*
  Archives an asset (hidden from the UI, not deleted).
  */
 int32_t nominal_asset_archive(int32_t client, const char *rid);

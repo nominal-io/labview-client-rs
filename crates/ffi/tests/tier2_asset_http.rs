@@ -1,4 +1,4 @@
-﻿//! Tier 2: real request-building + response-parsing + FFI conversion against
+//! Tier 2: real request-building + response-parsing + FFI conversion against
 //! a wiremock server speaking the Conjure wire format, including error paths
 //! (4xx and malformed bodies must produce error codes, never panics).
 
@@ -10,13 +10,17 @@ use wiremock::matchers::{body_partial_json, method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 use nominal_ffi::asset::{
-    nominal_asset_archive, nominal_asset_create, nominal_asset_created_at,
-    nominal_asset_data_source_count, nominal_asset_data_source_name_at,
+    nominal_asset_archive, nominal_asset_create, nominal_asset_create_add_label,
+    nominal_asset_create_begin, nominal_asset_create_commit, nominal_asset_create_free,
+    nominal_asset_create_set_description, nominal_asset_create_set_property,
+    nominal_asset_created_at, nominal_asset_data_source_count, nominal_asset_data_source_name_at,
     nominal_asset_data_source_rid_at, nominal_asset_data_source_type_at, nominal_asset_description,
     nominal_asset_free, nominal_asset_get, nominal_asset_label_at, nominal_asset_label_count,
     nominal_asset_list, nominal_asset_name, nominal_asset_property_count,
     nominal_asset_property_key_at, nominal_asset_property_value_at, nominal_asset_rid,
-    nominal_asset_search, nominal_asset_unarchive, nominal_asset_update, nominal_asset_url,
+    nominal_asset_search, nominal_asset_unarchive, nominal_asset_update,
+    nominal_asset_update_add_label, nominal_asset_update_begin, nominal_asset_update_commit,
+    nominal_asset_update_free, nominal_asset_update_set_property, nominal_asset_url,
 };
 use nominal_ffi::client::{nominal_client_free, nominal_client_new};
 use nominal_ffi::error::NominalErrorCode;
@@ -616,6 +620,160 @@ fn malformed_response_body_maps_to_error_not_panic() {
     );
 
     nominal_client_free(client);
+}
+
+#[test]
+fn staged_create_sends_labels_and_properties() {
+    let server = start_server();
+    // The mock only matches when the request body carries everything staged —
+    // wrong or missing fields mean no match and a failed call.
+    mount(
+        &server,
+        Mock::given(method("POST"))
+            .and(path("/scout/v1/asset"))
+            .and(body_partial_json(json!({
+                "title": "Flight 43",
+                "description": "Staged flight",
+                "labels": ["flight", "prod"],
+                "properties": {"engine": "m9", "vehicle": "rocket-2"}
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(full_asset_json())),
+    );
+    let client = new_client(&server);
+
+    let name = cstr("Flight 43");
+    let mut staging = 0i32;
+    assert_eq!(nominal_asset_create_begin(name.as_ptr(), &mut staging), 0);
+    assert!(staging > 0);
+
+    let description = cstr("Staged flight");
+    assert_eq!(
+        nominal_asset_create_set_description(staging, description.as_ptr()),
+        0
+    );
+    for label in ["prod", "flight"] {
+        let label = cstr(label);
+        assert_eq!(nominal_asset_create_add_label(staging, label.as_ptr()), 0);
+    }
+    for (key, value) in [("vehicle", "rocket-1"), ("engine", "m9")] {
+        let (key, value) = (cstr(key), cstr(value));
+        assert_eq!(
+            nominal_asset_create_set_property(staging, key.as_ptr(), value.as_ptr()),
+            0
+        );
+    }
+    // Same key overwrites — the request must carry rocket-2, not rocket-1.
+    let (key, value) = (cstr("vehicle"), cstr("rocket-2"));
+    assert_eq!(
+        nominal_asset_create_set_property(staging, key.as_ptr(), value.as_ptr()),
+        0
+    );
+
+    let mut asset = 0i32;
+    let code = nominal_asset_create_commit(client, staging, &mut asset);
+    assert_eq!(code, 0, "staged create failed: {}", last_error());
+
+    assert_eq!(nominal_asset_create_free(staging), 0);
+    assert_eq!(
+        nominal_asset_create_free(staging),
+        NominalErrorCode::InvalidHandle as i32,
+        "double free of staging must fail"
+    );
+
+    nominal_asset_free(asset);
+    nominal_client_free(client);
+}
+
+#[test]
+fn staged_create_rejects_empty_name_and_label() {
+    let mut staging = 0i32;
+    let empty = cstr("");
+    assert_eq!(
+        nominal_asset_create_begin(empty.as_ptr(), &mut staging),
+        NominalErrorCode::InvalidArgument as i32
+    );
+
+    let name = cstr("Valid");
+    assert_eq!(nominal_asset_create_begin(name.as_ptr(), &mut staging), 0);
+    assert_eq!(
+        nominal_asset_create_add_label(staging, empty.as_ptr()),
+        NominalErrorCode::InvalidArgument as i32
+    );
+    let value = cstr("v");
+    assert_eq!(
+        nominal_asset_create_set_property(staging, empty.as_ptr(), value.as_ptr()),
+        NominalErrorCode::InvalidArgument as i32
+    );
+    nominal_asset_create_free(staging);
+}
+
+#[test]
+fn staged_update_replaces_labels_and_properties() {
+    let server = start_server();
+    mount(
+        &server,
+        Mock::given(method("PUT"))
+            .and(path(format!("/scout/v1/asset/{ASSET_RID}")))
+            .and(body_partial_json(json!({
+                "labels": ["only-label"],
+                "properties": {"phase": "descent"}
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(full_asset_json())),
+    );
+    let client = new_client(&server);
+
+    let mut staging = 0i32;
+    assert_eq!(nominal_asset_update_begin(&mut staging), 0);
+    let label = cstr("only-label");
+    assert_eq!(nominal_asset_update_add_label(staging, label.as_ptr()), 0);
+    let (key, value) = (cstr("phase"), cstr("descent"));
+    assert_eq!(
+        nominal_asset_update_set_property(staging, key.as_ptr(), value.as_ptr()),
+        0
+    );
+
+    let rid = cstr(ASSET_RID);
+    let mut updated = 0i32;
+    let code = nominal_asset_update_commit(client, rid.as_ptr(), staging, &mut updated);
+    assert_eq!(code, 0, "staged update failed: {}", last_error());
+
+    nominal_asset_update_free(staging);
+    nominal_asset_free(updated);
+    nominal_client_free(client);
+}
+
+#[test]
+fn staged_update_with_no_fields_is_rejected() {
+    let _guard = common::message_lock();
+    let server = start_server();
+    let client = new_client(&server);
+
+    let mut staging = 0i32;
+    assert_eq!(nominal_asset_update_begin(&mut staging), 0);
+    let rid = cstr(ASSET_RID);
+    let mut updated = 0i32;
+    assert_eq!(
+        nominal_asset_update_commit(client, rid.as_ptr(), staging, &mut updated),
+        NominalErrorCode::InvalidArgument as i32
+    );
+    assert!(last_error().contains("no fields"), "got: {}", last_error());
+
+    nominal_asset_update_free(staging);
+    nominal_client_free(client);
+}
+
+#[test]
+fn staging_calls_reject_invalid_staging_handle() {
+    let _guard = common::message_lock();
+    let label = cstr("x");
+    assert_eq!(
+        nominal_asset_create_add_label(0, label.as_ptr()),
+        NominalErrorCode::InvalidHandle as i32
+    );
+    assert_eq!(
+        nominal_asset_update_add_label(987_654_321, label.as_ptr()),
+        NominalErrorCode::InvalidHandle as i32
+    );
 }
 
 #[test]

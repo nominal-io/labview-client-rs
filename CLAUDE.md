@@ -122,7 +122,8 @@ One source file per `nominal` module — mirrors the crate you're wrapping, so
 | `DateTime<Utc>` | `f64`, Unix **milliseconds** (pick one unit, document it once in `error.rs`, never mix; `i64` is banned — see Golden Rule) |
 | Enums (`IngestJobStatus`, `ChannelDataType`, etc.) | `i32` discriminant; keep a matching hand-written LabVIEW enum typedef in sync manually |
 | `Option<T>` | for strings: empty buffer + a separate `bool`/`i32` "is_present" out-param. For handles: `0` means absent (reserve handle `0` as never-valid) |
-| Builders (`AssetCreate`, `RunQuery`, etc.) | not exposed directly — each FFI "create" function takes flat primitive args and builds the request type internally, in one function body |
+| Builders (`AssetCreate`, `RunQuery`, etc.) | never exposed directly. Scalar-only requests: flat primitive args, one function body. Requests carrying string collections (labels, properties): a **staging handle** — see below |
+| `Vec<String>` / `HashMap<String,String>` (in — labels/properties on create/update) | staging handle: `_create_begin(...)` returns an `i32` staging handle; `_create_add_label(h, s)` / `_create_set_property(h, k, v)` accumulate onto it one string at a time; `_create_commit(client, h, out)` fires the API call; `_create_free(h)` releases it (commit does **not** free — every handle is freed explicitly, uniformly). Same shape for `_update_*`. This exists because a C string array (`char**`) has no LabVIEW representation — the wizard imports it as an unusable empty cluster. The staging object is a plain parameter struct owned by the FFI crate, never the upstream builder type. On update, `_add_label`/`_set_property` mean **replace**: touching labels at all replaces the asset's entire label set with exactly the accumulated ones (upstream semantics) |
 
 ## String Convention (pick one, use everywhere)
 
