@@ -45,18 +45,20 @@ after_includes = """
 #include <stdint.h>
 #include <stdbool.h>
 #else
-/* __int64, not long long: LabVIEW's C parser predates C99 and silently
- * fails on `long long`, leaving int64_t/uint64_t unresolved (every such
- * parameter then imports as an unusable empty cluster). */
-typedef signed char      int8_t;
-typedef unsigned char    uint8_t;
-typedef short            int16_t;
-typedef unsigned short   uint16_t;
-typedef int              int32_t;
-typedef unsigned int     uint32_t;
-typedef __int64          int64_t;
-typedef unsigned __int64 uint64_t;
-typedef unsigned char    bool;
+/* The 64-bit types are #defines, not typedefs, on purpose: LabVIEW's
+ * wizard recognizes `__int64` in declarations but silently fails to learn
+ * 64-bit types through typedef (each such parameter imports as an unusable
+ * empty cluster). The preprocessor substitutes the spelling it understands
+ * directly into every signature. */
+#define int64_t  __int64
+#define uint64_t unsigned __int64
+typedef signed char    int8_t;
+typedef unsigned char  uint8_t;
+typedef short          int16_t;
+typedef unsigned short uint16_t;
+typedef int            int32_t;
+typedef unsigned int   uint32_t;
+typedef unsigned char  bool;
 #endif
 #endif
 """
