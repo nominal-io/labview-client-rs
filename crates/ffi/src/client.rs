@@ -1,4 +1,4 @@
-//! `nominal_client_*` — connect/disconnect and client introspection.
+﻿//! `nominal_client_*` — connect/disconnect and client introspection.
 //!
 //! Built via `NominalClient::builder(token)` with explicit arguments, never
 //! the profile-file path. Multiple simultaneous clients are supported.
@@ -7,9 +7,9 @@ use std::os::raw::c_char;
 
 use nominal::core::NominalClient;
 
-use crate::error::{fail, fail_sdk, guard, guard_i64, NominalErrorCode};
+use crate::error::{fail, fail_sdk, guard, NominalErrorCode};
 use crate::handles::{handle_registry, lookup_handle};
-use crate::strings::{read_optional_str, read_required_str, write_opt_str_out, write_str_out};
+use crate::strings::{read_optional_str, read_required_str, write_opt_str_field, write_str_field};
 
 handle_registry!(ClientHandle, NominalClient);
 
@@ -26,7 +26,7 @@ pub extern "C" fn nominal_client_new(
     token: *const c_char,
     workspace_rid: *const c_char,
     base_url: *const c_char,
-    out_client: *mut i64,
+    out_client: *mut i32,
 ) -> i32 {
     guard(|| {
         let token = match read_required_str(token, "token") {
@@ -68,7 +68,7 @@ pub extern "C" fn nominal_client_new(
 /// returns an error. Asset (and other resource) handles obtained through this
 /// client stay valid — they hold their own data.
 #[no_mangle]
-pub extern "C" fn nominal_client_free(client: i64) -> i32 {
+pub extern "C" fn nominal_client_free(client: i32) -> i32 {
     guard(|| {
         if ClientHandle::remove(client) {
             0
@@ -81,36 +81,34 @@ pub extern "C" fn nominal_client_free(client: i64) -> i32 {
     })
 }
 
-/// Writes the client's API base URL into `buf`. String-getter convention:
-/// returns bytes needed, or a negative error code.
+/// Writes the client's API base URL into `buf` (capacity `cap` bytes),
+/// storing the byte count needed in `out_needed` — see the string convention
+/// in the header preamble.
 #[no_mangle]
-pub extern "C" fn nominal_client_base_url(client: i64, buf: *mut c_char, cap: usize) -> i64 {
-    guard_i64(|| {
-        let client = lookup_handle!(
-            ClientHandle,
-            client,
-            -(NominalErrorCode::InvalidHandle as i64)
-        );
-        write_str_out(client.base_url(), buf, cap)
+pub extern "C" fn nominal_client_base_url(
+    client: i32,
+    buf: *mut c_char,
+    cap: u32,
+    out_needed: *mut u32,
+) -> i32 {
+    guard(|| {
+        let client = lookup_handle!(ClientHandle, client);
+        write_str_field(client.base_url(), buf, cap, out_needed)
     })
 }
 
 /// Writes the client's workspace RID into `buf` and whether one is configured
-/// into `is_present`. String-getter convention: returns bytes needed, or a
-/// negative error code.
+/// into `is_present` (an absent workspace reports 0 bytes needed).
 #[no_mangle]
 pub extern "C" fn nominal_client_workspace_rid(
-    client: i64,
+    client: i32,
     buf: *mut c_char,
-    cap: usize,
+    cap: u32,
+    out_needed: *mut u32,
     is_present: *mut bool,
-) -> i64 {
-    guard_i64(|| {
-        let client = lookup_handle!(
-            ClientHandle,
-            client,
-            -(NominalErrorCode::InvalidHandle as i64)
-        );
-        write_opt_str_out(client.workspace_rid(), buf, cap, is_present)
+) -> i32 {
+    guard(|| {
+        let client = lookup_handle!(ClientHandle, client);
+        write_opt_str_field(client.workspace_rid(), buf, cap, out_needed, is_present)
     })
 }

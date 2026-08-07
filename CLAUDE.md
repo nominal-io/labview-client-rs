@@ -41,13 +41,26 @@ Every `extern "C"` function's parameters and return value must be one of:
 | Category | Representation |
 |---|---|
 | Boolean | `bool` (C `_Bool`) |
-| Integer / float | `i32`, `i64`, `u32`, `u64`, `f64` |
+| Integer / float | `i32`, `u32`, `f64` — **never `i64`/`u64`**, see below |
 | String (in) | `*const c_char` (null-terminated UTF-8) |
-| String (out) | caller-supplied `*mut c_char` buffer + `usize` capacity |
-| Array (in) | `*const T` + `usize` length, `T` itself primitive |
-| Array (out) | caller-supplied buffer + capacity, same pattern as strings |
-| Opaque object | `i64` handle (see Handle Registries) |
+| String (out) | caller-supplied `*mut c_char` buffer + `u32` capacity + `*mut u32` needed-bytes out-param |
+| Array (in) | `*const T` + `u32` length, `T` itself primitive |
+| Array (out) | not permitted — return a handle list instead (see Type Conversion Cookbook) |
+| Opaque object | `i32` handle (see Handle Registries) |
 | Nothing else | not permitted — flatten it |
+
+**No 64-bit integers cross the FFI boundary, ever.** LabVIEW's Import Shared
+Library wizard cannot parse any 64-bit integer type — not `long long`, not
+`__int64`, not typedefs or `#define`s of either (empirically verified; each
+such parameter imports as an unusable empty cluster, breaking the
+no-manual-patching success criterion). Consequences:
+- Handles are `i32` (two billion per process is ample).
+- Sizes, capacities, counts, and indices are `u32`/`i32` — also never
+  `usize`, whose width differs between the 32- and 64-bit DLLs.
+- Timestamps are `f64` Unix milliseconds (exact for whole milliseconds up to
+  2^53 — about 285,000 years).
+- Anything genuinely 64-bit (IDs, nanosecond timestamps) must cross as a
+  string or be split — prefer strings.
 
 No `#[repr(C)]` structs with embedded pointers, no unions, no nested arrays. If
 a `nominal` type has a field that isn't a primitive, it gets its own getter
@@ -62,8 +75,8 @@ nominal-labview/
 ├── justfile                    # all build entry points — no raw cargo commands
 ├── crates/
 │   └── ffi/
-│       ├── Cargo.toml          # depends on `nominal = "0.6"`
-│       ├── build.rs            # invokes cbindgen on every build
+│       ├── Cargo.toml          # depends on `nominal = "0.6"` (cbindgen is NOT
+│       │                       #   a build-dependency — see Build System)
 │       ├── cbindgen.toml
 │       └── src/
 │           ├── lib.rs          # module declarations only
@@ -84,6 +97,8 @@ nominal-labview/
 │   │   ├── nominalClient_64.dll
 │   │   ├── nominalClient_32.dll
 │   │   ├── nominalClient_64.so       # Ubuntu (and NI Linux RT, if validated as shareable)
+│   │   ├── nominal_ffi.h             # convenience copy of the cbindgen header (canonical
+│   │   │                             #   copy lives in crates/ffi/include/)
 │   │   └── nilrt/                    # ONLY exists if RT needs a separate build — see Contingency
 │   │       ├── nominalClient_64.so
 │   │       └── README.md
@@ -101,38 +116,51 @@ One source file per `nominal` module — mirrors the crate you're wrapping, so
 | `nominal` type | FFI representation |
 |---|---|
 | `String`, `&str` | buffer + capacity (see String Convention) |
-| `HashMap<String, String>` (properties/labels) | `_count(handle) -> i64` + `_key_at(handle, i, buf, cap)` + `_value_at(handle, i, buf, cap)` |
-| `Vec<String>` (labels) | `_count(handle) -> i64` + `_label_at(handle, i, buf, cap)` |
-| `Vec<Asset>` / `Vec<Run>` / etc. (list, search results) | return `*mut i64` array of new handles + out-param length; caller frees with a paired `_free_handle_array` fn |
-| `DateTime<Utc>` | `i64`, Unix **milliseconds** (pick one unit, document it once in `error.rs` or a `conventions.rs` doc comment, never mix) |
+| `HashMap<String, String>` (properties/labels) | `_count(handle, *mut u32)` + `_key_at(handle, i, buf, cap, *mut u32)` + `_value_at(handle, i, buf, cap, *mut u32)` |
+| `Vec<String>` (labels) | `_count(handle, *mut u32)` + `_label_at(handle, i, buf, cap, *mut u32)` |
+| `Vec<Asset>` / `Vec<Run>` / etc. (list, search results) | out-params: an `i32` handle-list handle + `u32` count. Caller reads entries with `nominal_handle_list_get(list, i, *mut i32)` and frees the list with `nominal_handle_list_free` (the resource handles inside outlive the list). Never return a raw array or double pointer — the wizard can't express them. |
+| `DateTime<Utc>` | `f64`, Unix **milliseconds** (pick one unit, document it once in `error.rs`, never mix; `i64` is banned — see Golden Rule) |
 | Enums (`IngestJobStatus`, `ChannelDataType`, etc.) | `i32` discriminant; keep a matching hand-written LabVIEW enum typedef in sync manually |
 | `Option<T>` | for strings: empty buffer + a separate `bool`/`i32` "is_present" out-param. For handles: `0` means absent (reserve handle `0` as never-valid) |
-| Builders (`AssetCreate`, `RunQuery`, etc.) | not exposed directly — each FFI "create" function takes flat primitive args and builds the request type internally, in one function body |
+| Builders (`AssetCreate`, `RunQuery`, etc.) | never exposed directly. Scalar-only requests: flat primitive args, one function body. Requests carrying string collections (labels, properties): a **staging handle** — see below |
+| `Vec<String>` / `HashMap<String,String>` (in — labels/properties on create/update) | staging handle: `_create_begin(...)` returns an `i32` staging handle; `_create_add_label(h, s)` / `_create_set_property(h, k, v)` accumulate onto it one string at a time; `_create_commit(client, h, out)` fires the API call; `_create_free(h)` releases it (commit does **not** free — every handle is freed explicitly, uniformly). Same shape for `_update_*`. This exists because a C string array (`char**`) has no LabVIEW representation — the wizard imports it as an unusable empty cluster. The staging object is a plain parameter struct owned by the FFI crate, never the upstream builder type. On update, `_add_label`/`_set_property` mean **replace**: touching labels at all replaces the asset's entire label set with exactly the accumulated ones (upstream semantics) |
 
 ## String Convention (pick one, use everywhere)
 
-Caller-supplied buffer, Win32-style:
+Caller-supplied buffer, Win32-style, status code returned like every other
+function:
 
 ```rust
-/// Writes `value` into `buf` (capacity `cap`, in bytes). Returns the number of
-/// bytes needed (excluding null terminator). If the return value is >= `cap`,
-/// the caller's buffer was too small — nothing was written — and the caller
-/// should retry with a buffer of at least (return value + 1) bytes.
-fn write_str_out(value: &str, buf: *mut c_char, cap: usize) -> i64 { ... }
+/// Writes `value` (plus a null terminator) into `buf` of capacity `cap`
+/// bytes, and stores the byte count needed (excluding the terminator) in
+/// `out_needed`. Returns Ok when written, or when `buf` is null (the
+/// supported size-query call). Returns BufferTooSmall — writing nothing —
+/// when `buf` is non-null but `cap` < needed + 1; the caller retries with a
+/// buffer of at least (*out_needed + 1) bytes.
+fn write_str_field(value: &str, buf: *mut c_char, cap: u32, out_needed: *mut u32) -> i32 { ... }
 ```
 
 This avoids the ownership/`_free` mismatch class of bugs entirely — no
 allocation crosses the boundary in the string case. Use this exact helper from
-`strings.rs` everywhere a string leaves Rust.
+`strings.rs` everywhere a string leaves Rust. (`nominal_last_error` uses the
+message-silent `write_str_out` variant underneath, so a too-small fetch buffer
+can't clobber the message being fetched.)
 
 ## Error Handling Convention
 
-Every FFI function returns `i32`: `0` = success, non-zero = error. On failure,
-call a global `set_last_error(String)` before returning; expose:
+**Every FFI function — including every getter — returns `i32`**: `0` =
+success, non-zero = an error-code enum value. All results (handles, strings,
+counts, timestamps) come back through out-parameters; no function ever
+returns data in its return value. This uniformity is load-bearing: it lets
+LabVIEW's Import Shared Library wizard apply its "Function Returns Error
+Code/Status" mode to every function in one pass, auto-wiring the return value
+into the error cluster with no per-function configuration.
+
+On failure, call a global `set_last_error(String)` before returning; expose:
 
 ```rust
 #[no_mangle]
-pub extern "C" fn nominal_last_error(buf: *mut c_char, cap: usize) -> i64 { ... }
+pub extern "C" fn nominal_last_error(buf: *mut c_char, cap: u32, out_needed: *mut u32) -> i32 { ... }
 ```
 
 so LabVIEW can fetch the message after a non-zero return — same pattern as
@@ -169,8 +197,8 @@ handle_registry!(RunHandle, nominal::core::Run);
 // ... one line per resource type
 ```
 
-Each invocation expands to a `Lazy<Mutex<HashMap<i64, Arc<T>>>>`, an
-`AtomicI64` counter, and `insert`/`get`/`remove` functions scoped to that type.
+Each invocation expands to a `Lazy<Mutex<HashMap<i32, Arc<T>>>>`, a shared
+`AtomicI32` counter, and `insert`/`get`/`remove` functions scoped to that type.
 Handle `0` is reserved and never issued, so it can double as "null"/"not
 found" in `Option<T>` cases above. Multiple simultaneous `ClientHandle`s must
 be supported (multiple independent connections, potentially different
@@ -210,7 +238,8 @@ on this directory, so the naming pattern is load-bearing and must be exact:
 nominalClient_64.dll     # Windows x64
 nominalClient_32.dll     # Windows x86
 nominalClient_64.so      # Linux x64 — covers both Ubuntu and NI Linux RT,
-                          # since both build from the same musl target (see Platform Notes)
+                          # built from the gnu target on an old glibc
+                          # baseline (see Platform Notes)
 ```
 
 Cargo's own output name (`nominal_ffi.dll` / `libnominal_ffi.so`, from the
@@ -218,13 +247,17 @@ crate name) does **not** match this convention — every `just` recipe must
 explicitly rename on copy, not just move the file. Get this wrong and the
 wildcard match in LabVIEW silently fails to find the library.
 
-The `cbindgen`-generated header does **not** go in `lv_src/bin/` — that
-directory is shared objects only. Keep it in `crates/ffi/include/nominal_ffi.h`,
-used only to feed the Import Shared Library wizard.
+The `cbindgen`-generated header lives canonically in
+`crates/ffi/include/nominal_ffi.h`, and the `just header` recipe (a
+prerequisite of every build recipe) also drops a convenience copy into
+`lv_src/bin/nominal_ffi.h` so the folder LabVIEW points at contains
+everything the Import Shared Library wizard needs. The header is the only
+non-shared-object allowed in `lv_src/bin/` — it doesn't participate in the
+wildcard match.
 
 ### Contingency: if Ubuntu and NI Linux RT can't share one `.so`
 
-The plan above assumes one musl-built `nominalClient_64.so` works for both
+The plan above assumes one gnu-built `nominalClient_64.so` works for both
 Ubuntu and NI Linux RT (validate this — see Platform Notes). **If validation
 shows they need separate builds:**
 
@@ -296,8 +329,8 @@ build-win32:
 
 # Linux (Ubuntu + NI Linux RT — see platform notes)
 build-linux:
-    cargo build --release --target x86_64-unknown-linux-musl -p ffi
-    cp target/x86_64-unknown-linux-musl/release/libnominal_ffi.so lv_src/bin/nominalClient_64.so
+    cargo build --release --target x86_64-unknown-linux-gnu -p ffi
+    cp target/x86_64-unknown-linux-gnu/release/libnominal_ffi.so lv_src/bin/nominalClient_64.so
 
 # macOS — best-effort only, do not chase failures here
 build-macos:
@@ -313,24 +346,35 @@ lint:
     cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-`cbindgen` runs from `crates/ffi/build.rs` on every `cargo build`, emitting
-`crates/ffi/include/nominal_ffi.h`. Feed this header to LabVIEW's Import
-Shared Library wizard — it never gets copied into `lv_src/bin/`.
+The header is generated by the **cbindgen CLI** (`cargo install cbindgen`),
+invoked by the `just header` recipe that every build recipe depends on — it
+emits `crates/ffi/include/nominal_ffi.h` and copies it to
+`lv_src/bin/nominal_ffi.h`. Feed either copy to LabVIEW's Import Shared
+Library wizard — they are identical. cbindgen must NEVER appear in
+`Cargo.toml`/`Cargo.lock` (not even as a build-dependency): it is licensed
+MPL-2.0, which org policy prohibits in the dependency tree. As an external
+tool it ships nothing into the binaries and stays out of the lockfile. CI
+fails the lint job if the committed header doesn't match what the sources
+generate.
 
 ## Platform Notes
 
 - **Windows 64/32-bit:** straightforward — `rustup target add i686-pc-windows-msvc`
   alongside the default 64-bit target. No special tooling.
-- **Ubuntu + NI Linux RT — use `x86_64-unknown-linux-musl`, not `-gnu`.** A
-  musl build is statically linked with no runtime glibc dependency, which
-  sidesteps glibc-version mismatches between the build machine and whatever's
-  on the RT target — the same reasoning that already led to picking `rustls`
-  over `native-tls` elsewhere in this project. **This needs empirical
-  validation against a real NI Linux RT target before relying on it** — RT
-  images vary, and NI's own `grpc-labview` project ships a dedicated
-  `nilrt-x86_64.cmake`, suggesting NI Linux RT has quirks beyond generic
-  Linux. Treat first-build-on-real-hardware as a required checkpoint, not a
-  formality. See Contingency above if it fails.
+- **Ubuntu + NI Linux RT — use `x86_64-unknown-linux-gnu`.** The original
+  plan called for musl (static, no glibc dependency), but that is unbuildable
+  and conceptually wrong for this project: rustc cannot produce a `cdylib`
+  for the musl target at all (it drops the crate type with a warning and the
+  build emits no `.so`), and a shared object loaded by LabVIEW — a
+  glibc-linked host process — must use the system's dynamic linker regardless,
+  so "static musl" never delivered its promised independence. glibc
+  compatibility is handled by building on an old baseline instead: CI pins
+  the `ubuntu-22.04` runner (glibc 2.35), and the `.so` runs on any distro
+  with glibc >= the build machine's. **Validation against a real NI Linux RT
+  target is still a required checkpoint** — if the RT image's glibc is older
+  than the build baseline, rebuild with an older-glibc toolchain (e.g.
+  `cargo-zigbuild --target x86_64-unknown-linux-gnu.2.28`), and see the
+  Contingency above if Ubuntu and RT can't share one `.so` at all.
 - **macOS:** attempt only if free (see justfile — allowed to fail silently).
 
 ## Testing Strategy
@@ -382,7 +426,7 @@ wire tier 3 into the default `test` recipe.
 4. Only after step 3 is validated: repeat the pattern for the remaining types
    (Run, Dataset, Video, Connection, Channel, Drive/Files, Ingest, Workbook,
    User, Workspace — see Reference: Current Crate Surface below).
-5. Validate the `x86_64-unknown-linux-musl` build against a real NI Linux RT
+5. Validate the `x86_64-unknown-linux-gnu` build against a real NI Linux RT
    target; apply the Contingency section above if needed.
 
 Do not parallelize step 4 across types before step 3 is fully proven — the

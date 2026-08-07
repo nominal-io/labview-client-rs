@@ -17,8 +17,19 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: extractions/setup-just@v2
+      # cbindgen is a CLI tool, not a build-dependency (MPL-2.0 is prohibited
+      # in the dependency tree by org policy).
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cbindgen
       - uses: Swatinem/rust-cache@v2
       - run: just lint
+      # The committed header must match what the sources generate — catches
+      # anyone editing FFI signatures without running `just header`.
+      - name: Check committed header is current
+        run: |
+          just header
+          git diff --exit-code crates/ffi/include/nominal_ffi.h lv_src/bin/nominal_ffi.h
 
   test:
     runs-on: ubuntu-latest
@@ -43,6 +54,9 @@ jobs:
       # i686 code with NASM — without this the 32-bit build fails.
       - uses: ilammy/setup-nasm@v1
       - uses: extractions/setup-just@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cbindgen
       - uses: Swatinem/rust-cache@v2
       - run: just build-win64
       - run: just build-win32
@@ -54,18 +68,21 @@ jobs:
             lv_src/bin/nominalClient_32.dll
             crates/ffi/include/nominal_ffi.h
 
-  # Linux build — musl, shared by Ubuntu and (pending hardware validation)
-  # NI Linux RT. See CLAUDE.md Platform Notes.
+  # Linux build — gnu target (musl can't build cdylibs; see CLAUDE.md
+  # Platform Notes), shared by Ubuntu and (pending hardware validation)
+  # NI Linux RT. Pinned to ubuntu-22.04, NOT -latest: the .so requires the
+  # target machine's glibc to be at least the build machine's (2.35 here) —
+  # a newer runner would silently raise that floor.
   build-linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-unknown-linux-musl
       - uses: extractions/setup-just@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cbindgen
       - uses: Swatinem/rust-cache@v2
-      - run: sudo apt-get update && sudo apt-get install -y musl-tools
       - run: just build-linux
       - uses: actions/upload-artifact@v4
         with:

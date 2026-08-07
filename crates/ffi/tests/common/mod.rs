@@ -1,4 +1,4 @@
-//! Shared helpers for the integration test suites, which call the exported
+﻿//! Shared helpers for the integration test suites, which call the exported
 //! FFI functions exactly the way LabVIEW would (pointers and buffers in,
 //! codes out) — just from Rust.
 
@@ -20,22 +20,50 @@ pub fn cstr(s: &str) -> CString {
 }
 
 /// Drives a string getter through the documented two-call pattern: size query
-/// with a null buffer, then the real call. Returns the negative error code on
-/// failure.
-pub fn read_string(mut getter: impl FnMut(*mut c_char, usize) -> i64) -> Result<String, i64> {
-    let needed = getter(std::ptr::null_mut(), 0);
-    if needed < 0 {
-        return Err(needed);
+/// with a null buffer, then the real call. Returns the error code on failure.
+pub fn read_string(
+    mut getter: impl FnMut(*mut c_char, u32, *mut u32) -> i32,
+) -> Result<String, i32> {
+    let mut needed = 0u32;
+    let code = getter(std::ptr::null_mut(), 0, &mut needed);
+    if code != 0 {
+        return Err(code);
     }
     let cap = needed as usize + 1;
     let mut buf = vec![0u8; cap];
-    let second = getter(buf.as_mut_ptr() as *mut c_char, cap);
-    assert_eq!(second, needed, "size query and write disagreed");
+    let mut needed_again = 0u32;
+    let code = getter(
+        buf.as_mut_ptr() as *mut c_char,
+        cap as u32,
+        &mut needed_again,
+    );
+    assert_eq!(code, 0, "write call failed after successful size query");
+    assert_eq!(needed_again, needed, "size query and write disagreed");
     assert_eq!(buf[needed as usize], 0, "missing null terminator");
     Ok(String::from_utf8(buf[..needed as usize].to_vec()).expect("invalid UTF-8 from getter"))
 }
 
+/// Drives a `_count` getter, returning the error code on failure.
+#[allow(dead_code)] // used by the tier-2 suite only; `common` compiles into both.
+pub fn read_count(mut getter: impl FnMut(*mut u32) -> i32) -> Result<u32, i32> {
+    let mut count = 0u32;
+    let code = getter(&mut count);
+    if code != 0 {
+        return Err(code);
+    }
+    Ok(count)
+}
+
+/// The last-error message is deliberately process-global, but the test
+/// harness runs tests on parallel threads — any test that asserts on the
+/// message text must hold this lock across the failing call and the read.
+#[allow(dead_code)]
+pub fn message_lock() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 pub fn last_error() -> String {
-    read_string(|buf, cap| nominal_ffi::error::nominal_last_error(buf, cap))
+    read_string(|buf, cap, needed| nominal_ffi::error::nominal_last_error(buf, cap, needed))
         .expect("nominal_last_error itself failed")
 }
