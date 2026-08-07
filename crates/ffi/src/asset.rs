@@ -109,7 +109,7 @@ pub extern "C" fn nominal_asset_get(client: i64, rid: *const c_char, out_asset: 
 pub extern "C" fn nominal_asset_list(
     client: i64,
     out_assets: *mut *mut i64,
-    out_count: *mut usize,
+    out_count: *mut u64,
 ) -> i32 {
     guard(|| {
         let client = lookup_handle!(ClientHandle, client, NominalErrorCode::InvalidHandle as i32);
@@ -152,7 +152,7 @@ pub extern "C" fn nominal_asset_search(
     property_key: *const c_char,
     property_value: *const c_char,
     out_assets: *mut *mut i64,
-    out_count: *mut usize,
+    out_count: *mut u64,
 ) -> i32 {
     guard(|| {
         let client = lookup_handle!(ClientHandle, client, NominalErrorCode::InvalidHandle as i32);
@@ -325,7 +325,7 @@ const INVALID_HANDLE: i64 = -(NominalErrorCode::InvalidHandle as i64);
 
 /// Writes the asset's RID into `buf`.
 #[no_mangle]
-pub extern "C" fn nominal_asset_rid(asset: i64, buf: *mut c_char, cap: usize) -> i64 {
+pub extern "C" fn nominal_asset_rid(asset: i64, buf: *mut c_char, cap: u64) -> i64 {
     guard_i64(|| {
         let asset = lookup_handle!(AssetHandle, asset, INVALID_HANDLE);
         write_str_out(asset.rid(), buf, cap)
@@ -334,7 +334,7 @@ pub extern "C" fn nominal_asset_rid(asset: i64, buf: *mut c_char, cap: usize) ->
 
 /// Writes the asset's name into `buf`.
 #[no_mangle]
-pub extern "C" fn nominal_asset_name(asset: i64, buf: *mut c_char, cap: usize) -> i64 {
+pub extern "C" fn nominal_asset_name(asset: i64, buf: *mut c_char, cap: u64) -> i64 {
     guard_i64(|| {
         let asset = lookup_handle!(AssetHandle, asset, INVALID_HANDLE);
         write_str_out(asset.name(), buf, cap)
@@ -347,7 +347,7 @@ pub extern "C" fn nominal_asset_name(asset: i64, buf: *mut c_char, cap: usize) -
 pub extern "C" fn nominal_asset_description(
     asset: i64,
     buf: *mut c_char,
-    cap: usize,
+    cap: u64,
     is_present: *mut bool,
 ) -> i64 {
     guard_i64(|| {
@@ -358,7 +358,7 @@ pub extern "C" fn nominal_asset_description(
 
 /// Writes the URL for viewing this asset in the Nominal web app into `buf`.
 #[no_mangle]
-pub extern "C" fn nominal_asset_url(asset: i64, buf: *mut c_char, cap: usize) -> i64 {
+pub extern "C" fn nominal_asset_url(asset: i64, buf: *mut c_char, cap: u64) -> i64 {
     guard_i64(|| {
         let asset = lookup_handle!(AssetHandle, asset, INVALID_HANDLE);
         write_str_out(&asset.nominal_url(), buf, cap)
@@ -416,7 +416,7 @@ pub extern "C" fn nominal_asset_property_key_at(
     asset: i64,
     index: i64,
     buf: *mut c_char,
-    cap: usize,
+    cap: u64,
 ) -> i64 {
     guard_i64(|| {
         let asset = lookup_handle!(AssetHandle, asset, INVALID_HANDLE);
@@ -433,7 +433,7 @@ pub extern "C" fn nominal_asset_property_value_at(
     asset: i64,
     index: i64,
     buf: *mut c_char,
-    cap: usize,
+    cap: u64,
 ) -> i64 {
     guard_i64(|| {
         let asset = lookup_handle!(AssetHandle, asset, INVALID_HANDLE);
@@ -459,7 +459,7 @@ pub extern "C" fn nominal_asset_label_at(
     asset: i64,
     index: i64,
     buf: *mut c_char,
-    cap: usize,
+    cap: u64,
 ) -> i64 {
     guard_i64(|| {
         let asset = lookup_handle!(AssetHandle, asset, INVALID_HANDLE);
@@ -499,7 +499,7 @@ pub extern "C" fn nominal_asset_data_source_name_at(
     asset: i64,
     index: i64,
     buf: *mut c_char,
-    cap: usize,
+    cap: u64,
 ) -> i64 {
     guard_i64(|| {
         let asset = lookup_handle!(AssetHandle, asset, INVALID_HANDLE);
@@ -517,7 +517,7 @@ pub extern "C" fn nominal_asset_data_source_rid_at(
     asset: i64,
     index: i64,
     buf: *mut c_char,
-    cap: usize,
+    cap: u64,
 ) -> i64 {
     guard_i64(|| {
         let asset = lookup_handle!(AssetHandle, asset, INVALID_HANDLE);

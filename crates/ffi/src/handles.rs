@@ -93,10 +93,12 @@ pub(crate) fn next_handle() -> i64 {
 }
 
 /// Hand a `Vec` of handles to the caller as a raw array. Paired with
-/// [`nominal_handle_array_free`].
-pub(crate) fn handles_into_raw(handles: Vec<i64>) -> (*mut i64, usize) {
+/// [`nominal_handle_array_free`]. Counts cross the boundary as `u64` (never
+/// `usize`/`size_t` — its width differs between the 32- and 64-bit DLLs,
+/// which LabVIEW's import wizard can't express).
+pub(crate) fn handles_into_raw(handles: Vec<i64>) -> (*mut i64, u64) {
     let boxed = handles.into_boxed_slice();
-    let count = boxed.len();
+    let count = boxed.len() as u64;
     (Box::into_raw(boxed) as *mut i64, count)
 }
 
@@ -105,7 +107,7 @@ pub(crate) fn handles_into_raw(handles: Vec<i64>) -> (*mut i64, usize) {
 /// to their own `_free` function. `count` must be exactly the count the array
 /// was returned with. A null `ptr` with `count` 0 is a no-op.
 #[no_mangle]
-pub extern "C" fn nominal_handle_array_free(ptr: *mut i64, count: usize) -> i32 {
+pub extern "C" fn nominal_handle_array_free(ptr: *mut i64, count: u64) -> i32 {
     crate::error::guard(|| {
         if ptr.is_null() {
             if count == 0 {
@@ -116,6 +118,12 @@ pub extern "C" fn nominal_handle_array_free(ptr: *mut i64, count: usize) -> i32 
                 "handle array pointer is null but count is non-zero",
             );
         }
+        let Ok(count) = usize::try_from(count) else {
+            return crate::error::fail(
+                crate::error::NominalErrorCode::InvalidArgument,
+                format!("handle array count {count} exceeds the address space"),
+            );
+        };
         // SAFETY: ptr/count came from handles_into_raw, which leaked a boxed
         // slice — length and capacity are both `count`.
         unsafe { drop(Vec::from_raw_parts(ptr, count, count)) };
@@ -167,6 +175,7 @@ mod tests {
 
     #[test]
     fn handle_array_free_null_rules() {
+        let _guard = crate::error::test_message_lock();
         assert_eq!(nominal_handle_array_free(std::ptr::null_mut(), 0), 0);
         assert_ne!(nominal_handle_array_free(std::ptr::null_mut(), 3), 0);
     }

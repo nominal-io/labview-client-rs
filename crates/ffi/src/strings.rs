@@ -13,10 +13,14 @@ use crate::error::{fail, NominalErrorCode};
 /// should retry with a buffer of at least (return value + 1) bytes.
 ///
 /// Calling with `buf` null / `cap` 0 is the supported way to query the size.
-pub(crate) fn write_str_out(value: &str, buf: *mut c_char, cap: usize) -> i64 {
+///
+/// `cap` is `u64`, not `usize`: `size_t` has different widths in the 32- and
+/// 64-bit DLLs, which LabVIEW's Import Shared Library wizard can't express
+/// without manual preprocessor definitions. `u64` is unambiguous everywhere.
+pub(crate) fn write_str_out(value: &str, buf: *mut c_char, cap: u64) -> i64 {
     let bytes = value.as_bytes();
     let needed = bytes.len() as i64;
-    if buf.is_null() || bytes.len() >= cap {
+    if buf.is_null() || bytes.len() as u64 >= cap {
         return needed;
     }
     // SAFETY: buf is non-null and the caller promises cap writable bytes;
@@ -33,7 +37,7 @@ pub(crate) fn write_str_out(value: &str, buf: *mut c_char, cap: usize) -> i64 {
 pub(crate) fn write_opt_str_out(
     value: Option<&str>,
     buf: *mut c_char,
-    cap: usize,
+    cap: u64,
     is_present: *mut bool,
 ) -> i64 {
     if !is_present.is_null() {
@@ -79,7 +83,7 @@ mod tests {
 
     fn write_to(value: &str, cap: usize) -> (i64, Vec<u8>) {
         let mut buf = vec![0xAAu8; cap];
-        let needed = write_str_out(value, buf.as_mut_ptr() as *mut c_char, cap);
+        let needed = write_str_out(value, buf.as_mut_ptr() as *mut c_char, cap as u64);
         (needed, buf)
     }
 
@@ -132,7 +136,7 @@ mod tests {
         let needed = write_opt_str_out(
             Some("hi"),
             buf.as_mut_ptr() as *mut c_char,
-            buf.len(),
+            buf.len() as u64,
             &mut is_present,
         );
         assert_eq!((needed, is_present), (2, true));
@@ -141,7 +145,7 @@ mod tests {
         let needed = write_opt_str_out(
             None,
             buf.as_mut_ptr() as *mut c_char,
-            buf.len(),
+            buf.len() as u64,
             &mut is_present,
         );
         assert_eq!((needed, is_present), (0, false));
@@ -149,12 +153,14 @@ mod tests {
 
     #[test]
     fn read_required_rejects_null() {
+        let _guard = crate::error::test_message_lock();
         let err = read_required_str(std::ptr::null(), "token").unwrap_err();
         assert_eq!(err, NominalErrorCode::NullArgument as i32);
     }
 
     #[test]
     fn read_required_rejects_invalid_utf8() {
+        let _guard = crate::error::test_message_lock();
         let bad = [0xFFu8, 0xFE, 0x00];
         let err = read_required_str(bad.as_ptr() as *const c_char, "token").unwrap_err();
         assert_eq!(err, NominalErrorCode::InvalidUtf8 as i32);

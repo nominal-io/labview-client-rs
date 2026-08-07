@@ -32,6 +32,7 @@ fn new_client(workspace_rid: Option<&str>, base_url: Option<&str>) -> Result<i64
 
 #[test]
 fn client_lifecycle_and_getters() {
+    let _guard = common::message_lock();
     let client = new_client(Some(WORKSPACE_RID), Some("http://127.0.0.1:1/api")).unwrap();
     assert!(client > 0);
 
@@ -70,6 +71,7 @@ fn absent_workspace_rid_reports_not_present() {
 
 #[test]
 fn null_token_is_rejected() {
+    let _guard = common::message_lock();
     let mut handle = 0i64;
     let code = nominal_client_new(
         std::ptr::null(),
@@ -83,6 +85,7 @@ fn null_token_is_rejected() {
 
 #[test]
 fn invalid_token_is_rejected() {
+    let _guard = common::message_lock();
     // Bearer tokens must not contain spaces.
     let token = cstr("not a valid token");
     let mut handle = 0i64;
@@ -98,12 +101,14 @@ fn invalid_token_is_rejected() {
 
 #[test]
 fn invalid_base_url_is_rejected() {
+    let _guard = common::message_lock();
     let err = new_client(None, Some("://not-a-url")).unwrap_err();
     assert_eq!(err, NominalErrorCode::InvalidArgument as i32);
 }
 
 #[test]
 fn invalid_workspace_rid_is_rejected() {
+    let _guard = common::message_lock();
     let err = new_client(Some("not-a-rid"), None).unwrap_err();
     assert_eq!(err, NominalErrorCode::InvalidArgument as i32);
     assert!(last_error().to_lowercase().contains("rid"));
@@ -111,6 +116,7 @@ fn invalid_workspace_rid_is_rejected() {
 
 #[test]
 fn null_out_param_is_rejected() {
+    let _guard = common::message_lock();
     let token = cstr("test-token");
     let code = nominal_client_new(
         token.as_ptr(),
@@ -123,6 +129,7 @@ fn null_out_param_is_rejected() {
 
 #[test]
 fn getters_reject_invalid_handles() {
+    let _guard = common::message_lock();
     for handle in [0i64, -1, 999_999_999] {
         let err = read_string(|buf, cap| nominal_client_base_url(handle, buf, cap)).unwrap_err();
         assert_eq!(err, -(NominalErrorCode::InvalidHandle as i64));

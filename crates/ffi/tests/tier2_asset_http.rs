@@ -111,6 +111,7 @@ fn create_asset(client: i64, name: &str, description: Option<&str>) -> Result<i6
 
 #[test]
 fn create_asset_marshals_every_field() {
+    let _guard = common::message_lock();
     let server = start_server();
     mount(
         &server,
@@ -249,6 +250,7 @@ fn get_asset_by_rid() {
 
 #[test]
 fn get_asset_not_found_maps_to_not_found_code() {
+    let _guard = common::message_lock();
     let server = start_server();
     mount(
         &server,
@@ -269,6 +271,7 @@ fn get_asset_not_found_maps_to_not_found_code() {
 
 #[test]
 fn invalid_rid_fails_before_any_request() {
+    let _guard = common::message_lock();
     // No mocks mounted: a request would fail differently than InvalidArgument.
     let server = start_server();
     let client = new_client(&server);
@@ -318,12 +321,12 @@ fn list_assets_follows_pagination() {
     let client = new_client(&server);
 
     let mut assets: *mut i64 = std::ptr::null_mut();
-    let mut count: usize = 0;
+    let mut count: u64 = 0;
     let code = nominal_asset_list(client, &mut assets, &mut count);
     assert_eq!(code, 0, "list failed: {}", last_error());
     assert_eq!(count, 2);
 
-    let handles = unsafe { std::slice::from_raw_parts(assets, count) }.to_vec();
+    let handles = unsafe { std::slice::from_raw_parts(assets, count as usize) }.to_vec();
     let names: Vec<String> = handles
         .iter()
         .map(|&h| read_string(|b, c| nominal_asset_name(h, b, c)).unwrap())
@@ -351,7 +354,7 @@ fn search(
         |opt: &Option<std::ffi::CString>| opt.as_ref().map_or(std::ptr::null(), |s| s.as_ptr());
 
     let mut assets: *mut i64 = std::ptr::null_mut();
-    let mut count: usize = 0;
+    let mut count: u64 = 0;
     let code = nominal_asset_search(
         client,
         as_ptr(&search_text),
@@ -364,7 +367,7 @@ fn search(
     if code != 0 {
         return Err(code);
     }
-    let handles = unsafe { std::slice::from_raw_parts(assets, count) }.to_vec();
+    let handles = unsafe { std::slice::from_raw_parts(assets, count as usize) }.to_vec();
     nominal_handle_array_free(assets, count);
     Ok(handles)
 }
@@ -411,12 +414,13 @@ fn search_sends_combined_filters() {
 
 #[test]
 fn search_property_key_without_value_is_rejected() {
+    let _guard = common::message_lock();
     let server = start_server();
     let client = new_client(&server);
 
     let key = cstr("vehicle");
     let mut assets: *mut i64 = std::ptr::null_mut();
-    let mut count: usize = 0;
+    let mut count: u64 = 0;
     let code = nominal_asset_search(
         client,
         std::ptr::null(),
@@ -467,6 +471,7 @@ fn update_asset_sends_only_set_fields() {
 
 #[test]
 fn update_with_nothing_to_change_is_rejected() {
+    let _guard = common::message_lock();
     let server = start_server();
     let client = new_client(&server);
 
@@ -520,6 +525,7 @@ fn archive_and_unarchive() {
 
 #[test]
 fn http_403_maps_to_api_error_not_panic() {
+    let _guard = common::message_lock();
     let server = start_server();
     mount(
         &server,
@@ -543,6 +549,7 @@ fn http_403_maps_to_api_error_not_panic() {
 
 #[test]
 fn malformed_response_body_maps_to_error_not_panic() {
+    let _guard = common::message_lock();
     let server = start_server();
     mount(
         &server,
@@ -566,6 +573,7 @@ fn malformed_response_body_maps_to_error_not_panic() {
 
 #[test]
 fn asset_calls_reject_invalid_client_handle() {
+    let _guard = common::message_lock();
     let rid = cstr(ASSET_RID);
     let mut out = 0i64;
     assert_eq!(

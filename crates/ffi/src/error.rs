@@ -129,12 +129,22 @@ fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
     }
 }
 
+/// LAST_ERROR is deliberately process-global, but the test harness runs unit
+/// tests on parallel threads — any test that *sets* an error (even without
+/// reading it) must hold this lock, or it races the tests that assert on the
+/// message text.
+#[cfg(test)]
+pub(crate) fn test_message_lock() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: Mutex<()> = Mutex::new(());
+    LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 /// Writes the most recent error message into `buf` (capacity `cap`, in
 /// bytes). Returns the number of bytes needed (excluding null terminator); if
 /// the return value is >= `cap`, nothing was written — retry with a larger
 /// buffer. Call after any function returns a non-zero / negative code.
 #[no_mangle]
-pub extern "C" fn nominal_last_error(buf: *mut c_char, cap: usize) -> i64 {
+pub extern "C" fn nominal_last_error(buf: *mut c_char, cap: u64) -> i64 {
     guard_i64(|| {
         let message = LAST_ERROR
             .lock()
@@ -148,13 +158,16 @@ pub extern "C" fn nominal_last_error(buf: *mut c_char, cap: usize) -> i64 {
 mod tests {
     use super::*;
 
+    use super::test_message_lock as message_lock;
+
     #[test]
     fn fail_sets_message_and_returns_code() {
+        let _guard = message_lock();
         let code = fail(NominalErrorCode::InvalidHandle, "no such handle");
         assert_eq!(code, NominalErrorCode::InvalidHandle as i32);
 
         let mut buf = [0u8; 64];
-        let needed = nominal_last_error(buf.as_mut_ptr() as *mut c_char, buf.len());
+        let needed = nominal_last_error(buf.as_mut_ptr() as *mut c_char, buf.len() as u64);
         assert_eq!(needed, "no such handle".len() as i64);
         let written = &buf[..needed as usize];
         assert_eq!(written, b"no such handle");
@@ -163,6 +176,7 @@ mod tests {
 
     #[test]
     fn fail_i64_negates_code() {
+        let _guard = message_lock();
         assert_eq!(
             fail_i64(NominalErrorCode::InvalidHandle, "x"),
             -(NominalErrorCode::InvalidHandle as i64)
@@ -171,26 +185,29 @@ mod tests {
 
     #[test]
     fn guard_converts_panic_to_error_code() {
+        let _guard = message_lock();
         let code = guard(|| panic!("boom"));
         assert_eq!(code, NominalErrorCode::Panic as i32);
 
         let mut buf = [0u8; 128];
-        let needed = nominal_last_error(buf.as_mut_ptr() as *mut c_char, buf.len());
+        let needed = nominal_last_error(buf.as_mut_ptr() as *mut c_char, buf.len() as u64);
         let message = std::str::from_utf8(&buf[..needed as usize]).unwrap();
         assert!(message.contains("boom"), "got: {message}");
     }
 
     #[test]
     fn guard_i64_converts_panic_to_negated_code() {
+        let _guard = message_lock();
         let value = guard_i64(|| panic!("boom"));
         assert_eq!(value, -(NominalErrorCode::Panic as i64));
     }
 
     #[test]
     fn last_error_reports_needed_bytes_when_buffer_too_small() {
+        let _guard = message_lock();
         set_last_error("a longer message than four bytes");
         let mut buf = [0xAAu8; 4];
-        let needed = nominal_last_error(buf.as_mut_ptr() as *mut c_char, buf.len());
+        let needed = nominal_last_error(buf.as_mut_ptr() as *mut c_char, buf.len() as u64);
         assert_eq!(needed, "a longer message than four bytes".len() as i64);
         assert_eq!(buf, [0xAAu8; 4], "buffer must be untouched when too small");
     }

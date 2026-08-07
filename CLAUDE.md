@@ -43,11 +43,16 @@ Every `extern "C"` function's parameters and return value must be one of:
 | Boolean | `bool` (C `_Bool`) |
 | Integer / float | `i32`, `i64`, `u32`, `u64`, `f64` |
 | String (in) | `*const c_char` (null-terminated UTF-8) |
-| String (out) | caller-supplied `*mut c_char` buffer + `usize` capacity |
-| Array (in) | `*const T` + `usize` length, `T` itself primitive |
+| String (out) | caller-supplied `*mut c_char` buffer + `u64` capacity |
+| Array (in) | `*const T` + `u64` length, `T` itself primitive |
 | Array (out) | caller-supplied buffer + capacity, same pattern as strings |
 | Opaque object | `i64` handle (see Handle Registries) |
 | Nothing else | not permitted — flatten it |
+
+Sizes, capacities, and counts are always `u64`, never `usize` — `size_t`'s
+width differs between the 32- and 64-bit DLLs, and LabVIEW's Import Shared
+Library wizard cannot resolve that without manual preprocessor definitions
+(which would break the no-manual-patching success criterion).
 
 No `#[repr(C)]` structs with embedded pointers, no unions, no nested arrays. If
 a `nominal` type has a field that isn't a primitive, it gets its own getter
@@ -120,7 +125,7 @@ Caller-supplied buffer, Win32-style:
 /// bytes needed (excluding null terminator). If the return value is >= `cap`,
 /// the caller's buffer was too small — nothing was written — and the caller
 /// should retry with a buffer of at least (return value + 1) bytes.
-fn write_str_out(value: &str, buf: *mut c_char, cap: usize) -> i64 { ... }
+fn write_str_out(value: &str, buf: *mut c_char, cap: u64) -> i64 { ... }
 ```
 
 This avoids the ownership/`_free` mismatch class of bugs entirely — no
@@ -134,7 +139,7 @@ call a global `set_last_error(String)` before returning; expose:
 
 ```rust
 #[no_mangle]
-pub extern "C" fn nominal_last_error(buf: *mut c_char, cap: usize) -> i64 { ... }
+pub extern "C" fn nominal_last_error(buf: *mut c_char, cap: u64) -> i64 { ... }
 ```
 
 so LabVIEW can fetch the message after a non-zero return — same pattern as

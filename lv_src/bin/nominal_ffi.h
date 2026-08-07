@@ -19,11 +19,29 @@
 #ifndef NOMINAL_FFI_H
 #define NOMINAL_FFI_H
 
-#include <stdarg.h>
-#include <stdbool.h>
-#include <stddef.h>
+
+/* Self-contained type definitions: LabVIEW's wizard ships no standard
+ * headers. Real compilers (MSVC/GCC/Clang) take the #include branch. */
+#ifdef _MSC_VER
 #include <stdint.h>
-#include <stdlib.h>
+#include <stdbool.h>
+#else
+#ifdef __GNUC__
+#include <stdint.h>
+#include <stdbool.h>
+#else
+typedef signed char        int8_t;
+typedef unsigned char      uint8_t;
+typedef short              int16_t;
+typedef unsigned short     uint16_t;
+typedef int                int32_t;
+typedef unsigned int       uint32_t;
+typedef long long          int64_t;
+typedef unsigned long long uint64_t;
+typedef unsigned char      bool;
+#endif
+#endif
+
 
 /*
  Error codes returned by every function in this library (negated when the
@@ -125,7 +143,7 @@ int32_t nominal_asset_get(int64_t client, const char *rid, int64_t *out_asset);
  the array with `nominal_handle_array_free`; free each handle in it with
  `nominal_asset_free`.
  */
-int32_t nominal_asset_list(int64_t client, int64_t **out_assets, size_t *out_count);
+int32_t nominal_asset_list(int64_t client, int64_t **out_assets, uint64_t *out_count);
 
 /*
  Searches assets, returning an array of new asset handles (see
@@ -143,7 +161,7 @@ int32_t nominal_asset_search(int64_t client,
                              const char *property_key,
                              const char *property_value,
                              int64_t **out_assets,
-                             size_t *out_count);
+                             uint64_t *out_count);
 
 /*
  Updates an asset's name and/or description. Null or empty arguments leave
@@ -175,23 +193,23 @@ int32_t nominal_asset_free(int64_t asset);
 /*
  Writes the asset's RID into `buf`.
  */
-int64_t nominal_asset_rid(int64_t asset, char *buf, size_t cap);
+int64_t nominal_asset_rid(int64_t asset, char *buf, uint64_t cap);
 
 /*
  Writes the asset's name into `buf`.
  */
-int64_t nominal_asset_name(int64_t asset, char *buf, size_t cap);
+int64_t nominal_asset_name(int64_t asset, char *buf, uint64_t cap);
 
 /*
  Writes the asset's description into `buf`, and whether one is set into
  `is_present` (an absent description reports 0 bytes needed).
  */
-int64_t nominal_asset_description(int64_t asset, char *buf, size_t cap, bool *is_present);
+int64_t nominal_asset_description(int64_t asset, char *buf, uint64_t cap, bool *is_present);
 
 /*
  Writes the URL for viewing this asset in the Nominal web app into `buf`.
  */
-int64_t nominal_asset_url(int64_t asset, char *buf, size_t cap);
+int64_t nominal_asset_url(int64_t asset, char *buf, uint64_t cap);
 
 /*
  Writes the asset's creation time to `out_millis` as Unix milliseconds (UTC).
@@ -206,12 +224,12 @@ int64_t nominal_asset_property_count(int64_t asset);
 /*
  Writes the key of the property at `index` (0-based, sorted-key order) into `buf`.
  */
-int64_t nominal_asset_property_key_at(int64_t asset, int64_t index, char *buf, size_t cap);
+int64_t nominal_asset_property_key_at(int64_t asset, int64_t index, char *buf, uint64_t cap);
 
 /*
  Writes the value of the property at `index` (0-based, sorted-key order) into `buf`.
  */
-int64_t nominal_asset_property_value_at(int64_t asset, int64_t index, char *buf, size_t cap);
+int64_t nominal_asset_property_value_at(int64_t asset, int64_t index, char *buf, uint64_t cap);
 
 /*
  Returns the number of labels on the asset.
@@ -221,7 +239,7 @@ int64_t nominal_asset_label_count(int64_t asset);
 /*
  Writes the label at `index` (0-based) into `buf`.
  */
-int64_t nominal_asset_label_at(int64_t asset, int64_t index, char *buf, size_t cap);
+int64_t nominal_asset_label_at(int64_t asset, int64_t index, char *buf, uint64_t cap);
 
 /*
  Returns the number of data sources attached to the asset.
@@ -232,13 +250,13 @@ int64_t nominal_asset_data_source_count(int64_t asset);
  Writes the scope name of the data source at `index` (0-based, sorted-name
  order) into `buf`.
  */
-int64_t nominal_asset_data_source_name_at(int64_t asset, int64_t index, char *buf, size_t cap);
+int64_t nominal_asset_data_source_name_at(int64_t asset, int64_t index, char *buf, uint64_t cap);
 
 /*
  Writes the RID of the data source at `index` (0-based, sorted-name order)
  into `buf`.
  */
-int64_t nominal_asset_data_source_rid_at(int64_t asset, int64_t index, char *buf, size_t cap);
+int64_t nominal_asset_data_source_rid_at(int64_t asset, int64_t index, char *buf, uint64_t cap);
 
 /*
  Writes the kind of the data source at `index` (0-based, sorted-name order)
@@ -272,14 +290,14 @@ int32_t nominal_client_free(int64_t client);
  Writes the client's API base URL into `buf`. String-getter convention:
  returns bytes needed, or a negative error code.
  */
-int64_t nominal_client_base_url(int64_t client, char *buf, size_t cap);
+int64_t nominal_client_base_url(int64_t client, char *buf, uint64_t cap);
 
 /*
  Writes the client's workspace RID into `buf` and whether one is configured
  into `is_present`. String-getter convention: returns bytes needed, or a
  negative error code.
  */
-int64_t nominal_client_workspace_rid(int64_t client, char *buf, size_t cap, bool *is_present);
+int64_t nominal_client_workspace_rid(int64_t client, char *buf, uint64_t cap, bool *is_present);
 
 /*
  Writes the most recent error message into `buf` (capacity `cap`, in
@@ -287,7 +305,7 @@ int64_t nominal_client_workspace_rid(int64_t client, char *buf, size_t cap, bool
  the return value is >= `cap`, nothing was written — retry with a larger
  buffer. Call after any function returns a non-zero / negative code.
  */
-int64_t nominal_last_error(char *buf, size_t cap);
+int64_t nominal_last_error(char *buf, uint64_t cap);
 
 /*
  Frees a handle array previously returned by a `_list`/`_search` function.
@@ -295,6 +313,6 @@ int64_t nominal_last_error(char *buf, size_t cap);
  to their own `_free` function. `count` must be exactly the count the array
  was returned with. A null `ptr` with `count` 0 is a no-op.
  */
-int32_t nominal_handle_array_free(int64_t *ptr, size_t count);
+int32_t nominal_handle_array_free(int64_t *ptr, uint64_t count);
 
 #endif  /* NOMINAL_FFI_H */

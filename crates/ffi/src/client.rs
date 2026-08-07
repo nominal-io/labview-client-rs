@@ -84,7 +84,7 @@ pub extern "C" fn nominal_client_free(client: i64) -> i32 {
 /// Writes the client's API base URL into `buf`. String-getter convention:
 /// returns bytes needed, or a negative error code.
 #[no_mangle]
-pub extern "C" fn nominal_client_base_url(client: i64, buf: *mut c_char, cap: usize) -> i64 {
+pub extern "C" fn nominal_client_base_url(client: i64, buf: *mut c_char, cap: u64) -> i64 {
     guard_i64(|| {
         let client = lookup_handle!(
             ClientHandle,
@@ -102,7 +102,7 @@ pub extern "C" fn nominal_client_base_url(client: i64, buf: *mut c_char, cap: us
 pub extern "C" fn nominal_client_workspace_rid(
     client: i64,
     buf: *mut c_char,
-    cap: usize,
+    cap: u64,
     is_present: *mut bool,
 ) -> i64 {
     guard_i64(|| {
