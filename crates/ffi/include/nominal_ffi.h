@@ -44,8 +44,7 @@ typedef unsigned char      bool;
 
 
 /*
- Error codes returned by every function in this library (negated when the
- function returns `i64`, see module docs).
+ Error codes returned by every function in this library.
  */
 enum NominalErrorCode
 #if __STDC_VERSION__ >= 202311L
@@ -94,6 +93,12 @@ enum NominalErrorCode
    Any other error from the underlying `nominal` SDK.
    */
   NominalErrorCode_SdkError = 9,
+  /*
+   A caller-supplied output buffer was too small; nothing was written.
+   The needed-bytes out-parameter says how much to allocate (+ 1 for the
+   null terminator).
+   */
+  NominalErrorCode_BufferTooSmall = 10,
 };
 #if __STDC_VERSION__ >= 202311L
 typedef enum NominalErrorCode NominalErrorCode;
@@ -191,25 +196,32 @@ int32_t nominal_asset_unarchive(int64_t client, const char *rid);
 int32_t nominal_asset_free(int64_t asset);
 
 /*
- Writes the asset's RID into `buf`.
+ Writes the asset's RID into `buf`, storing the byte count needed in
+ `out_needed`.
  */
-int64_t nominal_asset_rid(int64_t asset, char *buf, uint64_t cap);
+int32_t nominal_asset_rid(int64_t asset, char *buf, uint64_t cap, uint64_t *out_needed);
 
 /*
- Writes the asset's name into `buf`.
+ Writes the asset's name into `buf`, storing the byte count needed in
+ `out_needed`.
  */
-int64_t nominal_asset_name(int64_t asset, char *buf, uint64_t cap);
+int32_t nominal_asset_name(int64_t asset, char *buf, uint64_t cap, uint64_t *out_needed);
 
 /*
  Writes the asset's description into `buf`, and whether one is set into
  `is_present` (an absent description reports 0 bytes needed).
  */
-int64_t nominal_asset_description(int64_t asset, char *buf, uint64_t cap, bool *is_present);
+int32_t nominal_asset_description(int64_t asset,
+                                  char *buf,
+                                  uint64_t cap,
+                                  uint64_t *out_needed,
+                                  bool *is_present);
 
 /*
- Writes the URL for viewing this asset in the Nominal web app into `buf`.
+ Writes the URL for viewing this asset in the Nominal web app into `buf`,
+ storing the byte count needed in `out_needed`.
  */
-int64_t nominal_asset_url(int64_t asset, char *buf, uint64_t cap);
+int32_t nominal_asset_url(int64_t asset, char *buf, uint64_t cap, uint64_t *out_needed);
 
 /*
  Writes the asset's creation time to `out_millis` as Unix milliseconds (UTC).
@@ -217,46 +229,69 @@ int64_t nominal_asset_url(int64_t asset, char *buf, uint64_t cap);
 int32_t nominal_asset_created_at(int64_t asset, int64_t *out_millis);
 
 /*
- Returns the number of properties on the asset.
+ Stores the number of properties on the asset in `out_count`.
  */
-int64_t nominal_asset_property_count(int64_t asset);
+int32_t nominal_asset_property_count(int64_t asset, uint64_t *out_count);
 
 /*
- Writes the key of the property at `index` (0-based, sorted-key order) into `buf`.
+ Writes the key of the property at `index` (0-based, sorted-key order) into
+ `buf`, storing the byte count needed in `out_needed`.
  */
-int64_t nominal_asset_property_key_at(int64_t asset, int64_t index, char *buf, uint64_t cap);
+int32_t nominal_asset_property_key_at(int64_t asset,
+                                      int64_t index,
+                                      char *buf,
+                                      uint64_t cap,
+                                      uint64_t *out_needed);
 
 /*
- Writes the value of the property at `index` (0-based, sorted-key order) into `buf`.
+ Writes the value of the property at `index` (0-based, sorted-key order)
+ into `buf`, storing the byte count needed in `out_needed`.
  */
-int64_t nominal_asset_property_value_at(int64_t asset, int64_t index, char *buf, uint64_t cap);
+int32_t nominal_asset_property_value_at(int64_t asset,
+                                        int64_t index,
+                                        char *buf,
+                                        uint64_t cap,
+                                        uint64_t *out_needed);
 
 /*
- Returns the number of labels on the asset.
+ Stores the number of labels on the asset in `out_count`.
  */
-int64_t nominal_asset_label_count(int64_t asset);
+int32_t nominal_asset_label_count(int64_t asset, uint64_t *out_count);
 
 /*
- Writes the label at `index` (0-based) into `buf`.
+ Writes the label at `index` (0-based) into `buf`, storing the byte count
+ needed in `out_needed`.
  */
-int64_t nominal_asset_label_at(int64_t asset, int64_t index, char *buf, uint64_t cap);
+int32_t nominal_asset_label_at(int64_t asset,
+                               int64_t index,
+                               char *buf,
+                               uint64_t cap,
+                               uint64_t *out_needed);
 
 /*
- Returns the number of data sources attached to the asset.
+ Stores the number of data sources attached to the asset in `out_count`.
  */
-int64_t nominal_asset_data_source_count(int64_t asset);
+int32_t nominal_asset_data_source_count(int64_t asset, uint64_t *out_count);
 
 /*
  Writes the scope name of the data source at `index` (0-based, sorted-name
- order) into `buf`.
+ order) into `buf`, storing the byte count needed in `out_needed`.
  */
-int64_t nominal_asset_data_source_name_at(int64_t asset, int64_t index, char *buf, uint64_t cap);
+int32_t nominal_asset_data_source_name_at(int64_t asset,
+                                          int64_t index,
+                                          char *buf,
+                                          uint64_t cap,
+                                          uint64_t *out_needed);
 
 /*
  Writes the RID of the data source at `index` (0-based, sorted-name order)
- into `buf`.
+ into `buf`, storing the byte count needed in `out_needed`.
  */
-int64_t nominal_asset_data_source_rid_at(int64_t asset, int64_t index, char *buf, uint64_t cap);
+int32_t nominal_asset_data_source_rid_at(int64_t asset,
+                                         int64_t index,
+                                         char *buf,
+                                         uint64_t cap,
+                                         uint64_t *out_needed);
 
 /*
  Writes the kind of the data source at `index` (0-based, sorted-name order)
@@ -287,25 +322,32 @@ int32_t nominal_client_new(const char *token,
 int32_t nominal_client_free(int64_t client);
 
 /*
- Writes the client's API base URL into `buf`. String-getter convention:
- returns bytes needed, or a negative error code.
+ Writes the client's API base URL into `buf` (capacity `cap` bytes),
+ storing the byte count needed in `out_needed` — see the string convention
+ in the header preamble.
  */
-int64_t nominal_client_base_url(int64_t client, char *buf, uint64_t cap);
+int32_t nominal_client_base_url(int64_t client, char *buf, uint64_t cap, uint64_t *out_needed);
 
 /*
  Writes the client's workspace RID into `buf` and whether one is configured
- into `is_present`. String-getter convention: returns bytes needed, or a
- negative error code.
+ into `is_present` (an absent workspace reports 0 bytes needed).
  */
-int64_t nominal_client_workspace_rid(int64_t client, char *buf, uint64_t cap, bool *is_present);
+int32_t nominal_client_workspace_rid(int64_t client,
+                                     char *buf,
+                                     uint64_t cap,
+                                     uint64_t *out_needed,
+                                     bool *is_present);
 
 /*
  Writes the most recent error message into `buf` (capacity `cap`, in
- bytes). Returns the number of bytes needed (excluding null terminator); if
- the return value is >= `cap`, nothing was written — retry with a larger
- buffer. Call after any function returns a non-zero / negative code.
+ bytes) and stores the byte count needed (excluding the null terminator)
+ in `out_needed`. Call after any function returns a non-zero code.
+
+ A null `buf` is the supported size query. If `buf` is non-null but too
+ small, returns `BufferTooSmall` WITHOUT overwriting the stored message —
+ retry with a buffer of at least (`*out_needed` + 1) bytes.
  */
-int64_t nominal_last_error(char *buf, uint64_t cap);
+int32_t nominal_last_error(char *buf, uint64_t cap, uint64_t *out_needed);
 
 /*
  Frees a handle array previously returned by a `_list`/`_search` function.

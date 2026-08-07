@@ -43,7 +43,7 @@ Every `extern "C"` function's parameters and return value must be one of:
 | Boolean | `bool` (C `_Bool`) |
 | Integer / float | `i32`, `i64`, `u32`, `u64`, `f64` |
 | String (in) | `*const c_char` (null-terminated UTF-8) |
-| String (out) | caller-supplied `*mut c_char` buffer + `u64` capacity |
+| String (out) | caller-supplied `*mut c_char` buffer + `u64` capacity + `*mut u64` needed-bytes out-param |
 | Array (in) | `*const T` + `u64` length, `T` itself primitive |
 | Array (out) | caller-supplied buffer + capacity, same pattern as strings |
 | Opaque object | `i64` handle (see Handle Registries) |
@@ -118,28 +118,40 @@ One source file per `nominal` module — mirrors the crate you're wrapping, so
 
 ## String Convention (pick one, use everywhere)
 
-Caller-supplied buffer, Win32-style:
+Caller-supplied buffer, Win32-style, status code returned like every other
+function:
 
 ```rust
-/// Writes `value` into `buf` (capacity `cap`, in bytes). Returns the number of
-/// bytes needed (excluding null terminator). If the return value is >= `cap`,
-/// the caller's buffer was too small — nothing was written — and the caller
-/// should retry with a buffer of at least (return value + 1) bytes.
-fn write_str_out(value: &str, buf: *mut c_char, cap: u64) -> i64 { ... }
+/// Writes `value` (plus a null terminator) into `buf` of capacity `cap`
+/// bytes, and stores the byte count needed (excluding the terminator) in
+/// `out_needed`. Returns Ok when written, or when `buf` is null (the
+/// supported size-query call). Returns BufferTooSmall — writing nothing —
+/// when `buf` is non-null but `cap` < needed + 1; the caller retries with a
+/// buffer of at least (*out_needed + 1) bytes.
+fn write_str_field(value: &str, buf: *mut c_char, cap: u64, out_needed: *mut u64) -> i32 { ... }
 ```
 
 This avoids the ownership/`_free` mismatch class of bugs entirely — no
 allocation crosses the boundary in the string case. Use this exact helper from
-`strings.rs` everywhere a string leaves Rust.
+`strings.rs` everywhere a string leaves Rust. (`nominal_last_error` uses the
+message-silent `write_str_out` variant underneath, so a too-small fetch buffer
+can't clobber the message being fetched.)
 
 ## Error Handling Convention
 
-Every FFI function returns `i32`: `0` = success, non-zero = error. On failure,
-call a global `set_last_error(String)` before returning; expose:
+**Every FFI function — including every getter — returns `i32`**: `0` =
+success, non-zero = an error-code enum value. All results (handles, strings,
+counts, timestamps) come back through out-parameters; no function ever
+returns data in its return value. This uniformity is load-bearing: it lets
+LabVIEW's Import Shared Library wizard apply its "Function Returns Error
+Code/Status" mode to every function in one pass, auto-wiring the return value
+into the error cluster with no per-function configuration.
+
+On failure, call a global `set_last_error(String)` before returning; expose:
 
 ```rust
 #[no_mangle]
-pub extern "C" fn nominal_last_error(buf: *mut c_char, cap: u64) -> i64 { ... }
+pub extern "C" fn nominal_last_error(buf: *mut c_char, cap: u64, out_needed: *mut u64) -> i32 { ... }
 ```
 
 so LabVIEW can fetch the message after a non-zero return — same pattern as

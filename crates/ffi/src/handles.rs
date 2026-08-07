@@ -63,11 +63,10 @@ macro_rules! handle_registry {
 }
 
 /// Looks up `$handle` in `$registry`, or records an invalid-handle error and
-/// returns `$err_ret` from the enclosing function — the prologue that starts
-/// almost every FFI function. `$err_ret` is spelled out because action
-/// functions return `i32` codes while getters return negated `i64` codes.
+/// returns `NominalErrorCode::InvalidHandle` from the enclosing function —
+/// the prologue that starts almost every FFI function.
 macro_rules! lookup_handle {
-    ($registry:ty, $handle:expr, $err_ret:expr) => {
+    ($registry:ty, $handle:expr) => {
         match <$registry>::get($handle) {
             Some(value) => value,
             None => {
@@ -76,7 +75,7 @@ macro_rules! lookup_handle {
                     stringify!($registry),
                     $handle
                 ));
-                return $err_ret;
+                return crate::error::NominalErrorCode::InvalidHandle as i32;
             }
         }
     };

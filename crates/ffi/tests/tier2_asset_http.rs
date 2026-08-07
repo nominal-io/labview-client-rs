@@ -4,7 +4,7 @@
 
 mod common;
 
-use common::{cstr, last_error, read_string, TEST_RT};
+use common::{cstr, last_error, read_count, read_string, TEST_RT};
 use serde_json::json;
 use wiremock::matchers::{body_partial_json, method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
@@ -109,6 +109,16 @@ fn create_asset(client: i64, name: &str, description: Option<&str>) -> Result<i6
     }
 }
 
+/// Reads the description via the size-query pattern, returning
+/// (code, needed, is_present).
+fn query_description(asset: i64) -> (i32, u64, bool) {
+    let mut needed = 0u64;
+    let mut is_present = false;
+    let code =
+        nominal_asset_description(asset, std::ptr::null_mut(), 0, &mut needed, &mut is_present);
+    (code, needed, is_present)
+}
+
 #[test]
 fn create_asset_marshals_every_field() {
     let _guard = common::message_lock();
@@ -129,16 +139,16 @@ fn create_asset_marshals_every_field() {
         .unwrap_or_else(|code| panic!("create failed ({code}): {}", last_error()));
 
     // Scalar fields.
-    let rid = read_string(|b, c| nominal_asset_rid(asset, b, c)).unwrap();
+    let rid = read_string(|b, c, n| nominal_asset_rid(asset, b, c, n)).unwrap();
     assert_eq!(rid, ASSET_RID);
-    let name = read_string(|b, c| nominal_asset_name(asset, b, c)).unwrap();
+    let name = read_string(|b, c, n| nominal_asset_name(asset, b, c, n)).unwrap();
     assert_eq!(name, "Flight 42");
-    let url = read_string(|b, c| nominal_asset_url(asset, b, c)).unwrap();
+    let url = read_string(|b, c, n| nominal_asset_url(asset, b, c, n)).unwrap();
     assert!(url.ends_with(&format!("/assets/{ASSET_RID}")), "got: {url}");
 
     let mut is_present = false;
     let description =
-        read_string(|b, c| nominal_asset_description(asset, b, c, &mut is_present)).unwrap();
+        read_string(|b, c, n| nominal_asset_description(asset, b, c, n, &mut is_present)).unwrap();
     assert!(is_present);
     assert_eq!(description, "Qualification flight");
 
@@ -147,12 +157,15 @@ fn create_asset_marshals_every_field() {
     assert_eq!(millis, CREATED_AT_MILLIS);
 
     // Properties come back in sorted-key order: engine, then vehicle.
-    assert_eq!(nominal_asset_property_count(asset), 2);
+    assert_eq!(
+        read_count(|c| nominal_asset_property_count(asset, c)).unwrap(),
+        2
+    );
     let keys_values: Vec<(String, String)> = (0..2)
         .map(|i| {
             (
-                read_string(|b, c| nominal_asset_property_key_at(asset, i, b, c)).unwrap(),
-                read_string(|b, c| nominal_asset_property_value_at(asset, i, b, c)).unwrap(),
+                read_string(|b, c, n| nominal_asset_property_key_at(asset, i, b, c, n)).unwrap(),
+                read_string(|b, c, n| nominal_asset_property_value_at(asset, i, b, c, n)).unwrap(),
             )
         })
         .collect();
@@ -165,36 +178,44 @@ fn create_asset_marshals_every_field() {
     );
 
     // Labels.
-    assert_eq!(nominal_asset_label_count(asset), 2);
+    assert_eq!(
+        read_count(|c| nominal_asset_label_count(asset, c)).unwrap(),
+        2
+    );
     let labels: Vec<String> = (0..2)
-        .map(|i| read_string(|b, c| nominal_asset_label_at(asset, i, b, c)).unwrap())
+        .map(|i| read_string(|b, c, n| nominal_asset_label_at(asset, i, b, c, n)).unwrap())
         .collect();
     assert_eq!(labels, vec!["flight", "prod"]);
 
     // Data sources in sorted-scope-name order: cockpit-cam, then flight-data.
-    assert_eq!(nominal_asset_data_source_count(asset), 2);
-    let name0 = read_string(|b, c| nominal_asset_data_source_name_at(asset, 0, b, c)).unwrap();
+    assert_eq!(
+        read_count(|c| nominal_asset_data_source_count(asset, c)).unwrap(),
+        2
+    );
+    let name0 =
+        read_string(|b, c, n| nominal_asset_data_source_name_at(asset, 0, b, c, n)).unwrap();
     assert_eq!(name0, "cockpit-cam");
-    let rid0 = read_string(|b, c| nominal_asset_data_source_rid_at(asset, 0, b, c)).unwrap();
+    let rid0 = read_string(|b, c, n| nominal_asset_data_source_rid_at(asset, 0, b, c, n)).unwrap();
     assert_eq!(rid0, VIDEO_RID);
     let mut kind = -1i32;
     assert_eq!(nominal_asset_data_source_type_at(asset, 0, &mut kind), 0);
     assert_eq!(kind, 1, "video = 1");
-    let name1 = read_string(|b, c| nominal_asset_data_source_name_at(asset, 1, b, c)).unwrap();
+    let name1 =
+        read_string(|b, c, n| nominal_asset_data_source_name_at(asset, 1, b, c, n)).unwrap();
     assert_eq!(name1, "flight-data");
     assert_eq!(nominal_asset_data_source_type_at(asset, 1, &mut kind), 0);
     assert_eq!(kind, 0, "dataset = 0");
 
     // Out-of-range indices fail with a code, not a panic.
-    let err = read_string(|b, c| nominal_asset_label_at(asset, 2, b, c)).unwrap_err();
-    assert_eq!(err, -(NominalErrorCode::IndexOutOfRange as i64));
-    let err = read_string(|b, c| nominal_asset_property_key_at(asset, -1, b, c)).unwrap_err();
-    assert_eq!(err, -(NominalErrorCode::IndexOutOfRange as i64));
+    let err = read_string(|b, c, n| nominal_asset_label_at(asset, 2, b, c, n)).unwrap_err();
+    assert_eq!(err, NominalErrorCode::IndexOutOfRange as i32);
+    let err = read_string(|b, c, n| nominal_asset_property_key_at(asset, -1, b, c, n)).unwrap_err();
+    assert_eq!(err, NominalErrorCode::IndexOutOfRange as i32);
 
     // Freed handles become invalid.
     assert_eq!(nominal_asset_free(asset), 0);
-    let err = read_string(|b, c| nominal_asset_name(asset, b, c)).unwrap_err();
-    assert_eq!(err, -(NominalErrorCode::InvalidHandle as i64));
+    let err = read_string(|b, c, n| nominal_asset_name(asset, b, c, n)).unwrap_err();
+    assert_eq!(err, NominalErrorCode::InvalidHandle as i32);
 
     nominal_client_free(client);
 }
@@ -213,12 +234,20 @@ fn minimal_asset_reports_absent_optionals() {
     let client = new_client(&server);
     let asset = create_asset(client, "Bare", None).unwrap();
 
-    let mut is_present = true;
-    let needed = nominal_asset_description(asset, std::ptr::null_mut(), 0, &mut is_present);
-    assert_eq!((needed, is_present), (0, false));
-    assert_eq!(nominal_asset_property_count(asset), 0);
-    assert_eq!(nominal_asset_label_count(asset), 0);
-    assert_eq!(nominal_asset_data_source_count(asset), 0);
+    let (code, needed, is_present) = query_description(asset);
+    assert_eq!((code, needed, is_present), (0, 0, false));
+    assert_eq!(
+        read_count(|c| nominal_asset_property_count(asset, c)).unwrap(),
+        0
+    );
+    assert_eq!(
+        read_count(|c| nominal_asset_label_count(asset, c)).unwrap(),
+        0
+    );
+    assert_eq!(
+        read_count(|c| nominal_asset_data_source_count(asset, c)).unwrap(),
+        0
+    );
 
     nominal_asset_free(asset);
     nominal_client_free(client);
@@ -241,7 +270,7 @@ fn get_asset_by_rid() {
     let mut asset = 0i64;
     let code = nominal_asset_get(client, rid.as_ptr(), &mut asset);
     assert_eq!(code, 0, "get failed: {}", last_error());
-    let name = read_string(|b, c| nominal_asset_name(asset, b, c)).unwrap();
+    let name = read_string(|b, c, n| nominal_asset_name(asset, b, c, n)).unwrap();
     assert_eq!(name, "Flight 42");
 
     nominal_asset_free(asset);
@@ -329,7 +358,7 @@ fn list_assets_follows_pagination() {
     let handles = unsafe { std::slice::from_raw_parts(assets, count as usize) }.to_vec();
     let names: Vec<String> = handles
         .iter()
-        .map(|&h| read_string(|b, c| nominal_asset_name(h, b, c)).unwrap())
+        .map(|&h| read_string(|b, c, n| nominal_asset_name(h, b, c, n)).unwrap())
         .collect();
     assert_eq!(names, vec!["First", "Second"]);
 
@@ -462,7 +491,7 @@ fn update_asset_sends_only_set_fields() {
         &mut updated,
     );
     assert_eq!(code, 0, "update failed: {}", last_error());
-    let new_name = read_string(|b, c| nominal_asset_name(updated, b, c)).unwrap();
+    let new_name = read_string(|b, c, n| nominal_asset_name(updated, b, c, n)).unwrap();
     assert_eq!(new_name, "Renamed");
 
     nominal_asset_free(updated);

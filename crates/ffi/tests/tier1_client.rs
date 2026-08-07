@@ -30,18 +30,33 @@ fn new_client(workspace_rid: Option<&str>, base_url: Option<&str>) -> Result<i64
     }
 }
 
+/// Size-queries the workspace RID getter, returning (code, needed, is_present).
+fn query_workspace_rid(client: i64) -> (i32, u64, bool) {
+    let mut needed = 0u64;
+    let mut is_present = false;
+    let code = nominal_client_workspace_rid(
+        client,
+        std::ptr::null_mut(),
+        0,
+        &mut needed,
+        &mut is_present,
+    );
+    (code, needed, is_present)
+}
+
 #[test]
 fn client_lifecycle_and_getters() {
     let _guard = common::message_lock();
     let client = new_client(Some(WORKSPACE_RID), Some("http://127.0.0.1:1/api")).unwrap();
     assert!(client > 0);
 
-    let base_url = read_string(|buf, cap| nominal_client_base_url(client, buf, cap)).unwrap();
+    let base_url =
+        read_string(|buf, cap, needed| nominal_client_base_url(client, buf, cap, needed)).unwrap();
     assert_eq!(base_url, "http://127.0.0.1:1/api");
 
-    let mut is_present = false;
-    let needed = nominal_client_workspace_rid(client, std::ptr::null_mut(), 0, &mut is_present);
-    assert_eq!(needed, WORKSPACE_RID.len() as i64);
+    let (code, needed, is_present) = query_workspace_rid(client);
+    assert_eq!(code, 0);
+    assert_eq!(needed, WORKSPACE_RID.len() as u64);
     assert!(is_present);
 
     assert_eq!(nominal_client_free(client), 0);
@@ -56,16 +71,34 @@ fn client_lifecycle_and_getters() {
 #[test]
 fn absent_workspace_rid_reports_not_present() {
     let client = new_client(None, None).unwrap();
-    let mut is_present = true;
-    let needed = nominal_client_workspace_rid(client, std::ptr::null_mut(), 0, &mut is_present);
-    assert_eq!(needed, 0);
-    assert!(!is_present);
+    let (code, needed, is_present) = query_workspace_rid(client);
+    assert_eq!((code, needed, is_present), (0, 0, false));
 
     // Empty string means absent too — LabVIEW passes "" more easily than null.
     nominal_client_free(client);
     let client = new_client(Some(""), None).unwrap();
-    let needed = nominal_client_workspace_rid(client, std::ptr::null_mut(), 0, &mut is_present);
-    assert_eq!((needed, is_present), (0, false));
+    let (code, needed, is_present) = query_workspace_rid(client);
+    assert_eq!((code, needed, is_present), (0, 0, false));
+    nominal_client_free(client);
+}
+
+#[test]
+fn too_small_buffer_reports_needed_bytes() {
+    let _guard = common::message_lock();
+    let client = new_client(None, Some("http://127.0.0.1:1/api")).unwrap();
+
+    let mut buf = [0xAAu8; 4];
+    let mut needed = 0u64;
+    let code = nominal_client_base_url(
+        client,
+        buf.as_mut_ptr() as *mut std::os::raw::c_char,
+        buf.len() as u64,
+        &mut needed,
+    );
+    assert_eq!(code, NominalErrorCode::BufferTooSmall as i32);
+    assert_eq!(needed, "http://127.0.0.1:1/api".len() as u64);
+    assert_eq!(buf, [0xAAu8; 4], "buffer must be untouched when too small");
+
     nominal_client_free(client);
 }
 
@@ -131,7 +164,8 @@ fn null_out_param_is_rejected() {
 fn getters_reject_invalid_handles() {
     let _guard = common::message_lock();
     for handle in [0i64, -1, 999_999_999] {
-        let err = read_string(|buf, cap| nominal_client_base_url(handle, buf, cap)).unwrap_err();
-        assert_eq!(err, -(NominalErrorCode::InvalidHandle as i64));
+        let err = read_string(|buf, cap, needed| nominal_client_base_url(handle, buf, cap, needed))
+            .unwrap_err();
+        assert_eq!(err, NominalErrorCode::InvalidHandle as i32);
     }
 }
