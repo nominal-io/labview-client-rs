@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: extractions/setup-just@v2
+      - uses: Swatinem/rust-cache@v2
+      - run: just lint
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: extractions/setup-just@v2
+      - uses: Swatinem/rust-cache@v2
+      # Tiers 1+2 only (marshaling + wiremock). Tier 3 integration tests run
+      # on their own scheduled workflow, never per-PR.
+      - run: just test
+
+  # Windows builds (64 + 32) — the primary LabVIEW deployment targets.
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc, i686-pc-windows-msvc
+      # aws-lc-sys (rustls's crypto backend, via `nominal`) assembles its
+      # i686 code with NASM — without this the 32-bit build fails.
+      - uses: ilammy/setup-nasm@v1
+      - uses: extractions/setup-just@v2
+      - uses: Swatinem/rust-cache@v2
+      - run: just build-win64
+      - run: just build-win32
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nominalClient-windows
+          path: |
+            lv_src/bin/nominalClient_64.dll
+            lv_src/bin/nominalClient_32.dll
+            crates/ffi/include/nominal_ffi.h
+
+  # Linux build — musl, shared by Ubuntu and (pending hardware validation)
+  # NI Linux RT. See CLAUDE.md Platform Notes.
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+      - uses: extractions/setup-just@v2
+      - uses: Swatinem/rust-cache@v2
+      - run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - run: just build-linux
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nominalClient-linux
+          path: |
+            lv_src/bin/nominalClient_64.so
+            crates/ffi/include/nominal_ffi.h

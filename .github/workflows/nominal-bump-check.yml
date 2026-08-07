@@ -1,0 +1,52 @@
+# Daily canary: pull the newest `nominal` and run the test suite against it.
+# A red run here IS the signal this project exists to provide — upstream API
+# drift caught in CI, not as a runtime surprise in LabVIEW.
+name: nominal bump check
+
+on:
+  schedule:
+    - cron: "17 6 * * *" # daily, off the top of the hour
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  bump-and-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: extractions/setup-just@v2
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Update nominal to latest compatible version
+        run: cargo update -p nominal
+
+      - name: Check whether the lockfile changed
+        id: diff
+        run: |
+          if git diff --quiet Cargo.lock; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Test even when the lockfile didn't move — a yanked or newly broken
+      # transitive dep should still fail loudly.
+      - name: Test against updated nominal
+        run: just test
+
+      - name: Open PR bumping Cargo.lock
+        if: steps.diff.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: bot/nominal-bump
+          title: "chore: bump `nominal` in Cargo.lock"
+          commit-message: "chore: bump `nominal` in Cargo.lock (scheduled check)"
+          body: |
+            Automated `cargo update -p nominal`. Tests passed against the
+            updated version — see the triggering `nominal bump check` run.
