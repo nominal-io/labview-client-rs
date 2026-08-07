@@ -84,6 +84,8 @@ nominal-labview/
 │   │   ├── nominalClient_64.dll
 │   │   ├── nominalClient_32.dll
 │   │   ├── nominalClient_64.so       # Ubuntu (and NI Linux RT, if validated as shareable)
+│   │   ├── nominal_ffi.h             # convenience copy of the cbindgen header (canonical
+│   │   │                             #   copy lives in crates/ffi/include/)
 │   │   └── nilrt/                    # ONLY exists if RT needs a separate build — see Contingency
 │   │       ├── nominalClient_64.so
 │   │       └── README.md
@@ -218,9 +220,12 @@ crate name) does **not** match this convention — every `just` recipe must
 explicitly rename on copy, not just move the file. Get this wrong and the
 wildcard match in LabVIEW silently fails to find the library.
 
-The `cbindgen`-generated header does **not** go in `lv_src/bin/` — that
-directory is shared objects only. Keep it in `crates/ffi/include/nominal_ffi.h`,
-used only to feed the Import Shared Library wizard.
+The `cbindgen`-generated header lives canonically in
+`crates/ffi/include/nominal_ffi.h`, and every build also drops a convenience
+copy into `lv_src/bin/nominal_ffi.h` (done by `build.rs`, not the justfile) so
+the folder LabVIEW points at contains everything the Import Shared Library
+wizard needs. The header is the only non-shared-object allowed in
+`lv_src/bin/` — it doesn't participate in the wildcard match.
 
 ### Contingency: if Ubuntu and NI Linux RT can't share one `.so`
 
@@ -314,8 +319,9 @@ lint:
 ```
 
 `cbindgen` runs from `crates/ffi/build.rs` on every `cargo build`, emitting
-`crates/ffi/include/nominal_ffi.h`. Feed this header to LabVIEW's Import
-Shared Library wizard — it never gets copied into `lv_src/bin/`.
+`crates/ffi/include/nominal_ffi.h` and copying it to `lv_src/bin/nominal_ffi.h`.
+Feed either copy to LabVIEW's Import Shared Library wizard — they are
+identical.
 
 ## Platform Notes
 
