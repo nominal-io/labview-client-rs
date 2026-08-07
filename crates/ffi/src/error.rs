@@ -1,4 +1,4 @@
-//! Error codes, the last-error message, and the panic guard every exported
+﻿//! Error codes, the last-error message, and the panic guard every exported
 //! function is wrapped in.
 //!
 //! # Conventions used across this library
@@ -10,23 +10,26 @@
 //! "Function Returns Error Code/Status" mode to every function and auto-wire
 //! the return value into the error cluster.
 //!
-//! **Strings out.** The caller supplies a byte buffer + `u64` capacity; the
+//! **Strings out.** The caller supplies a byte buffer + `u32` capacity; the
 //! function stores the byte count needed (excluding the null terminator) in a
-//! `*mut u64` out-parameter. A null buffer is the supported size query (
+//! `*mut u32` out-parameter. A null buffer is the supported size query (
 //! returns success). A non-null buffer that is too small returns
 //! `BufferTooSmall` and writes nothing — retry with (needed + 1) bytes.
 //!
 //! After any error, call [`nominal_last_error`] for a human-readable message
 //! — same pattern as `GetLastError`/`errno` + `strerror`.
 //!
-//! **Sizes and counts** are always `u64`, never `usize`/`size_t` — `size_t`'s
-//! width differs between the 32- and 64-bit DLLs, which the wizard can't
-//! resolve without manual preprocessor definitions.
+//! **No 64-bit integers cross this boundary, ever.** LabVIEW's Import Shared
+//! Library wizard cannot parse any 64-bit integer type (`long long`,
+//! `__int64`, or typedefs of them) — such parameters import as unusable
+//! empty clusters. Sizes and counts are `u32` (also never `usize`/`size_t`,
+//! whose width differs between the 32- and 64-bit DLLs); handles are `i32`.
 //!
-//! **Timestamps.** Every timestamp crossing this FFI boundary is an `i64` in
-//! Unix **milliseconds** (UTC). No other unit is ever used.
+//! **Timestamps.** Every timestamp crossing this FFI boundary is a `double`
+//! in Unix **milliseconds** (UTC) — exact for whole milliseconds up to 2^53
+//! (~285,000 years). No other unit is ever used.
 //!
-//! **Handles.** Opaque objects are `i64` handles. Handle `0` is reserved,
+//! **Handles.** Opaque objects are `i32` handles. Handle `0` is reserved,
 //! never issued, and doubles as "null"/"absent".
 
 use std::os::raw::c_char;
@@ -143,7 +146,7 @@ pub(crate) fn test_message_lock() -> std::sync::MutexGuard<'static, ()> {
 /// small, returns `BufferTooSmall` WITHOUT overwriting the stored message —
 /// retry with a buffer of at least (`*out_needed` + 1) bytes.
 #[no_mangle]
-pub extern "C" fn nominal_last_error(buf: *mut c_char, cap: u64, out_needed: *mut u64) -> i32 {
+pub extern "C" fn nominal_last_error(buf: *mut c_char, cap: u32, out_needed: *mut u32) -> i32 {
     guard(|| {
         let message = LAST_ERROR
             .lock()
@@ -161,13 +164,13 @@ mod tests {
     use super::*;
 
     fn fetch_last_error() -> String {
-        let mut needed = 0u64;
+        let mut needed = 0u32;
         let code = nominal_last_error(std::ptr::null_mut(), 0, &mut needed);
         assert_eq!(code, 0, "size query must succeed");
         let mut buf = vec![0u8; needed as usize + 1];
         let code = nominal_last_error(
             buf.as_mut_ptr() as *mut c_char,
-            buf.len() as u64,
+            buf.len() as u32,
             &mut needed,
         );
         assert_eq!(code, 0);
@@ -199,14 +202,14 @@ mod tests {
         let _guard = message_lock();
         set_last_error("the original error message");
         let mut buf = [0xAAu8; 4];
-        let mut needed = 0u64;
+        let mut needed = 0u32;
         let code = nominal_last_error(
             buf.as_mut_ptr() as *mut c_char,
-            buf.len() as u64,
+            buf.len() as u32,
             &mut needed,
         );
         assert_eq!(code, NominalErrorCode::BufferTooSmall as i32);
-        assert_eq!(needed, "the original error message".len() as u64);
+        assert_eq!(needed, "the original error message".len() as u32);
         assert_eq!(buf, [0xAAu8; 4], "buffer must be untouched when too small");
         // The stored message must survive the failed fetch.
         assert_eq!(fetch_last_error(), "the original error message");

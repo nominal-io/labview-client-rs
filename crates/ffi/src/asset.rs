@@ -14,7 +14,7 @@ use nominal::core::{Asset, AssetCreate, AssetQuery, AssetUpdate, DataSource};
 
 use crate::client::ClientHandle;
 use crate::error::{fail, fail_sdk, guard, NominalErrorCode};
-use crate::handles::{handle_registry, handles_into_raw, lookup_handle};
+use crate::handles::{handle_registry, insert_handle_list, lookup_handle};
 use crate::runtime::block_on;
 use crate::strings::{read_optional_str, read_required_str, write_opt_str_field, write_str_field};
 
@@ -39,10 +39,10 @@ pub enum NominalDataSourceType {
 /// Free with `nominal_asset_free`.
 #[no_mangle]
 pub extern "C" fn nominal_asset_create(
-    client: i64,
+    client: i32,
     name: *const c_char,
     description: *const c_char,
-    out_asset: *mut i64,
+    out_asset: *mut i32,
 ) -> i32 {
     guard(|| {
         let client = lookup_handle!(ClientHandle, client);
@@ -77,7 +77,7 @@ pub extern "C" fn nominal_asset_create(
 /// Fetches the asset with the given RID, writing its handle to `out_asset`.
 /// Free with `nominal_asset_free`.
 #[no_mangle]
-pub extern "C" fn nominal_asset_get(client: i64, rid: *const c_char, out_asset: *mut i64) -> i32 {
+pub extern "C" fn nominal_asset_get(client: i32, rid: *const c_char, out_asset: *mut i32) -> i32 {
     guard(|| {
         let client = lookup_handle!(ClientHandle, client);
         let rid = match read_required_str(rid, "rid") {
@@ -99,33 +99,30 @@ pub extern "C" fn nominal_asset_get(client: i64, rid: *const c_char, out_asset: 
     })
 }
 
-/// Lists all assets (newest first), returning an array of new asset handles.
+/// Lists all assets (newest first), returning a handle list.
 ///
-/// On success `*out_assets` points to an array of `*out_count` handles. Free
-/// the array with `nominal_handle_array_free`; free each handle in it with
-/// `nominal_asset_free`.
+/// On success `*out_list` is a handle list of `*out_count` asset handles —
+/// read them with `nominal_handle_list_get` and free the list with
+/// `nominal_handle_list_free`. Each asset handle stays valid until passed to
+/// `nominal_asset_free`, independent of the list.
 #[no_mangle]
-pub extern "C" fn nominal_asset_list(
-    client: i64,
-    out_assets: *mut *mut i64,
-    out_count: *mut u64,
-) -> i32 {
+pub extern "C" fn nominal_asset_list(client: i32, out_list: *mut i32, out_count: *mut u32) -> i32 {
     guard(|| {
         let client = lookup_handle!(ClientHandle, client);
-        if out_assets.is_null() || out_count.is_null() {
+        if out_list.is_null() || out_count.is_null() {
             return fail(
                 NominalErrorCode::NullArgument,
-                "out_assets and out_count must not be null",
+                "out_list and out_count must not be null",
             );
         }
 
         match block_on(client.assets().list()) {
             Ok(assets) => {
-                let handles = assets.into_iter().map(AssetHandle::insert).collect();
-                let (ptr, count) = handles_into_raw(handles);
+                let handles: Vec<i32> = assets.into_iter().map(AssetHandle::insert).collect();
+                let count = handles.len() as u32;
                 // SAFETY: out pointers checked non-null above; caller owns them.
                 unsafe {
-                    *out_assets = ptr;
+                    *out_list = insert_handle_list(handles);
                     *out_count = count;
                 }
                 0
@@ -135,8 +132,8 @@ pub extern "C" fn nominal_asset_list(
     })
 }
 
-/// Searches assets, returning an array of new asset handles (see
-/// `nominal_asset_list` for ownership).
+/// Searches assets, returning a handle list (see `nominal_asset_list` for
+/// ownership).
 ///
 /// Filters may each be null or empty ("no filter"); the ones provided are
 /// combined with AND:
@@ -145,13 +142,13 @@ pub extern "C" fn nominal_asset_list(
 /// - `property_key` + `property_value`: property match (both or neither)
 #[no_mangle]
 pub extern "C" fn nominal_asset_search(
-    client: i64,
+    client: i32,
     search_text: *const c_char,
     label: *const c_char,
     property_key: *const c_char,
     property_value: *const c_char,
-    out_assets: *mut *mut i64,
-    out_count: *mut u64,
+    out_list: *mut i32,
+    out_count: *mut u32,
 ) -> i32 {
     guard(|| {
         let client = lookup_handle!(ClientHandle, client);
@@ -171,10 +168,10 @@ pub extern "C" fn nominal_asset_search(
             Ok(value) => value,
             Err(code) => return code,
         };
-        if out_assets.is_null() || out_count.is_null() {
+        if out_list.is_null() || out_count.is_null() {
             return fail(
                 NominalErrorCode::NullArgument,
-                "out_assets and out_count must not be null",
+                "out_list and out_count must not be null",
             );
         }
 
@@ -200,11 +197,11 @@ pub extern "C" fn nominal_asset_search(
 
         match block_on(client.assets().search(query)) {
             Ok(assets) => {
-                let handles = assets.into_iter().map(AssetHandle::insert).collect();
-                let (ptr, count) = handles_into_raw(handles);
+                let handles: Vec<i32> = assets.into_iter().map(AssetHandle::insert).collect();
+                let count = handles.len() as u32;
                 // SAFETY: out pointers checked non-null above; caller owns them.
                 unsafe {
-                    *out_assets = ptr;
+                    *out_list = insert_handle_list(handles);
                     *out_count = count;
                 }
                 0
@@ -220,11 +217,11 @@ pub extern "C" fn nominal_asset_search(
 /// but keep their stale field values.
 #[no_mangle]
 pub extern "C" fn nominal_asset_update(
-    client: i64,
+    client: i32,
     rid: *const c_char,
     name: *const c_char,
     description: *const c_char,
-    out_asset: *mut i64,
+    out_asset: *mut i32,
 ) -> i32 {
     guard(|| {
         let client = lookup_handle!(ClientHandle, client);
@@ -271,7 +268,7 @@ pub extern "C" fn nominal_asset_update(
 
 /// Archives an asset (hidden from the UI, not deleted).
 #[no_mangle]
-pub extern "C" fn nominal_asset_archive(client: i64, rid: *const c_char) -> i32 {
+pub extern "C" fn nominal_asset_archive(client: i32, rid: *const c_char) -> i32 {
     guard(|| {
         let client = lookup_handle!(ClientHandle, client);
         let rid = match read_required_str(rid, "rid") {
@@ -287,7 +284,7 @@ pub extern "C" fn nominal_asset_archive(client: i64, rid: *const c_char) -> i32 
 
 /// Unarchives an asset, restoring its visibility in the UI.
 #[no_mangle]
-pub extern "C" fn nominal_asset_unarchive(client: i64, rid: *const c_char) -> i32 {
+pub extern "C" fn nominal_asset_unarchive(client: i32, rid: *const c_char) -> i32 {
     guard(|| {
         let client = lookup_handle!(ClientHandle, client);
         let rid = match read_required_str(rid, "rid") {
@@ -303,7 +300,7 @@ pub extern "C" fn nominal_asset_unarchive(client: i64, rid: *const c_char) -> i3
 
 /// Frees an asset handle. Freeing twice returns an error.
 #[no_mangle]
-pub extern "C" fn nominal_asset_free(asset: i64) -> i32 {
+pub extern "C" fn nominal_asset_free(asset: i32) -> i32 {
     guard(|| {
         if AssetHandle::remove(asset) {
             0
@@ -324,10 +321,10 @@ pub extern "C" fn nominal_asset_free(asset: i64) -> i32 {
 /// `out_needed`.
 #[no_mangle]
 pub extern "C" fn nominal_asset_rid(
-    asset: i64,
+    asset: i32,
     buf: *mut c_char,
-    cap: u64,
-    out_needed: *mut u64,
+    cap: u32,
+    out_needed: *mut u32,
 ) -> i32 {
     guard(|| {
         let asset = lookup_handle!(AssetHandle, asset);
@@ -339,10 +336,10 @@ pub extern "C" fn nominal_asset_rid(
 /// `out_needed`.
 #[no_mangle]
 pub extern "C" fn nominal_asset_name(
-    asset: i64,
+    asset: i32,
     buf: *mut c_char,
-    cap: u64,
-    out_needed: *mut u64,
+    cap: u32,
+    out_needed: *mut u32,
 ) -> i32 {
     guard(|| {
         let asset = lookup_handle!(AssetHandle, asset);
@@ -354,10 +351,10 @@ pub extern "C" fn nominal_asset_name(
 /// `is_present` (an absent description reports 0 bytes needed).
 #[no_mangle]
 pub extern "C" fn nominal_asset_description(
-    asset: i64,
+    asset: i32,
     buf: *mut c_char,
-    cap: u64,
-    out_needed: *mut u64,
+    cap: u32,
+    out_needed: *mut u32,
     is_present: *mut bool,
 ) -> i32 {
     guard(|| {
@@ -370,10 +367,10 @@ pub extern "C" fn nominal_asset_description(
 /// storing the byte count needed in `out_needed`.
 #[no_mangle]
 pub extern "C" fn nominal_asset_url(
-    asset: i64,
+    asset: i32,
     buf: *mut c_char,
-    cap: u64,
-    out_needed: *mut u64,
+    cap: u32,
+    out_needed: *mut u32,
 ) -> i32 {
     guard(|| {
         let asset = lookup_handle!(AssetHandle, asset);
@@ -381,9 +378,12 @@ pub extern "C" fn nominal_asset_url(
     })
 }
 
-/// Writes the asset's creation time to `out_millis` as Unix milliseconds (UTC).
+/// Writes the asset's creation time to `out_millis` as Unix milliseconds
+/// (UTC), as a `double` — exact for whole milliseconds up to 2^53 (LabVIEW's
+/// import wizard cannot parse 64-bit integer types, so `i64` is not an
+/// option here).
 #[no_mangle]
-pub extern "C" fn nominal_asset_created_at(asset: i64, out_millis: *mut i64) -> i32 {
+pub extern "C" fn nominal_asset_created_at(asset: i32, out_millis: *mut f64) -> i32 {
     guard(|| {
         let asset = lookup_handle!(AssetHandle, asset);
         if out_millis.is_null() {
@@ -393,23 +393,23 @@ pub extern "C" fn nominal_asset_created_at(asset: i64, out_millis: *mut i64) -> 
             );
         }
         // SAFETY: out_millis checked non-null above; caller owns it.
-        unsafe { *out_millis = asset.created_at().timestamp_millis() };
+        unsafe { *out_millis = asset.created_at().timestamp_millis() as f64 };
         0
     })
 }
 
-/// Writes a collection size to a `*mut u64` out-parameter — shared prologue
+/// Writes a collection size to a `*mut u32` out-parameter — shared prologue
 /// of every `_count` getter.
-fn write_count(count: usize, out_count: *mut u64) -> i32 {
+fn write_count(count: usize, out_count: *mut u32) -> i32 {
     if out_count.is_null() {
         return fail(NominalErrorCode::NullArgument, "out_count must not be null");
     }
     // SAFETY: out_count checked non-null above; caller owns it.
-    unsafe { *out_count = count as u64 };
+    unsafe { *out_count = count as u32 };
     0
 }
 
-fn index_error(index: i64, len: usize) -> i32 {
+fn index_error(index: i32, len: usize) -> i32 {
     fail(
         NominalErrorCode::IndexOutOfRange,
         format!("index {index} out of range for collection of {len}"),
@@ -418,7 +418,7 @@ fn index_error(index: i64, len: usize) -> i32 {
 
 /// Properties in sorted-key order, so `index` means the same entry across the
 /// `_count` / `_key_at` / `_value_at` calls.
-fn property_at(asset: &Asset, index: i64) -> Result<(&String, &String), i32> {
+fn property_at(asset: &Asset, index: i32) -> Result<(&String, &String), i32> {
     let mut keys: Vec<&String> = asset.properties().keys().collect();
     keys.sort();
     let key = keys.get(usize::try_from(index).map_err(|_| index_error(index, keys.len()))?);
@@ -430,7 +430,7 @@ fn property_at(asset: &Asset, index: i64) -> Result<(&String, &String), i32> {
 
 /// Stores the number of properties on the asset in `out_count`.
 #[no_mangle]
-pub extern "C" fn nominal_asset_property_count(asset: i64, out_count: *mut u64) -> i32 {
+pub extern "C" fn nominal_asset_property_count(asset: i32, out_count: *mut u32) -> i32 {
     guard(|| {
         let asset = lookup_handle!(AssetHandle, asset);
         write_count(asset.properties().len(), out_count)
@@ -441,11 +441,11 @@ pub extern "C" fn nominal_asset_property_count(asset: i64, out_count: *mut u64) 
 /// `buf`, storing the byte count needed in `out_needed`.
 #[no_mangle]
 pub extern "C" fn nominal_asset_property_key_at(
-    asset: i64,
-    index: i64,
+    asset: i32,
+    index: i32,
     buf: *mut c_char,
-    cap: u64,
-    out_needed: *mut u64,
+    cap: u32,
+    out_needed: *mut u32,
 ) -> i32 {
     guard(|| {
         let asset = lookup_handle!(AssetHandle, asset);
@@ -460,11 +460,11 @@ pub extern "C" fn nominal_asset_property_key_at(
 /// into `buf`, storing the byte count needed in `out_needed`.
 #[no_mangle]
 pub extern "C" fn nominal_asset_property_value_at(
-    asset: i64,
-    index: i64,
+    asset: i32,
+    index: i32,
     buf: *mut c_char,
-    cap: u64,
-    out_needed: *mut u64,
+    cap: u32,
+    out_needed: *mut u32,
 ) -> i32 {
     guard(|| {
         let asset = lookup_handle!(AssetHandle, asset);
@@ -477,7 +477,7 @@ pub extern "C" fn nominal_asset_property_value_at(
 
 /// Stores the number of labels on the asset in `out_count`.
 #[no_mangle]
-pub extern "C" fn nominal_asset_label_count(asset: i64, out_count: *mut u64) -> i32 {
+pub extern "C" fn nominal_asset_label_count(asset: i32, out_count: *mut u32) -> i32 {
     guard(|| {
         let asset = lookup_handle!(AssetHandle, asset);
         write_count(asset.labels().len(), out_count)
@@ -488,11 +488,11 @@ pub extern "C" fn nominal_asset_label_count(asset: i64, out_count: *mut u64) -> 
 /// needed in `out_needed`.
 #[no_mangle]
 pub extern "C" fn nominal_asset_label_at(
-    asset: i64,
-    index: i64,
+    asset: i32,
+    index: i32,
     buf: *mut c_char,
-    cap: u64,
-    out_needed: *mut u64,
+    cap: u32,
+    out_needed: *mut u32,
 ) -> i32 {
     guard(|| {
         let asset = lookup_handle!(AssetHandle, asset);
@@ -506,7 +506,7 @@ pub extern "C" fn nominal_asset_label_at(
 
 /// Data sources in sorted-scope-name order, so `index` means the same entry
 /// across the `_count` / `_name_at` / `_rid_at` / `_type_at` calls.
-fn data_source_at(asset: &Asset, index: i64) -> Result<(&String, &DataSource), i32> {
+fn data_source_at(asset: &Asset, index: i32) -> Result<(&String, &DataSource), i32> {
     let mut names: Vec<&String> = asset.data_sources().keys().collect();
     names.sort();
     let name = names.get(usize::try_from(index).map_err(|_| index_error(index, names.len()))?);
@@ -518,7 +518,7 @@ fn data_source_at(asset: &Asset, index: i64) -> Result<(&String, &DataSource), i
 
 /// Stores the number of data sources attached to the asset in `out_count`.
 #[no_mangle]
-pub extern "C" fn nominal_asset_data_source_count(asset: i64, out_count: *mut u64) -> i32 {
+pub extern "C" fn nominal_asset_data_source_count(asset: i32, out_count: *mut u32) -> i32 {
     guard(|| {
         let asset = lookup_handle!(AssetHandle, asset);
         write_count(asset.data_sources().len(), out_count)
@@ -529,11 +529,11 @@ pub extern "C" fn nominal_asset_data_source_count(asset: i64, out_count: *mut u6
 /// order) into `buf`, storing the byte count needed in `out_needed`.
 #[no_mangle]
 pub extern "C" fn nominal_asset_data_source_name_at(
-    asset: i64,
-    index: i64,
+    asset: i32,
+    index: i32,
     buf: *mut c_char,
-    cap: u64,
-    out_needed: *mut u64,
+    cap: u32,
+    out_needed: *mut u32,
 ) -> i32 {
     guard(|| {
         let asset = lookup_handle!(AssetHandle, asset);
@@ -548,11 +548,11 @@ pub extern "C" fn nominal_asset_data_source_name_at(
 /// into `buf`, storing the byte count needed in `out_needed`.
 #[no_mangle]
 pub extern "C" fn nominal_asset_data_source_rid_at(
-    asset: i64,
-    index: i64,
+    asset: i32,
+    index: i32,
     buf: *mut c_char,
-    cap: u64,
-    out_needed: *mut u64,
+    cap: u32,
+    out_needed: *mut u32,
 ) -> i32 {
     guard(|| {
         let asset = lookup_handle!(AssetHandle, asset);
@@ -567,8 +567,8 @@ pub extern "C" fn nominal_asset_data_source_rid_at(
 /// to `out_type` as a `NominalDataSourceType` value.
 #[no_mangle]
 pub extern "C" fn nominal_asset_data_source_type_at(
-    asset: i64,
-    index: i64,
+    asset: i32,
+    index: i32,
     out_type: *mut i32,
 ) -> i32 {
     guard(|| {

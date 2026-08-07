@@ -1,4 +1,4 @@
-//! Tier 2: real request-building + response-parsing + FFI conversion against
+﻿//! Tier 2: real request-building + response-parsing + FFI conversion against
 //! a wiremock server speaking the Conjure wire format, including error paths
 //! (4xx and malformed bodies must produce error codes, never panics).
 
@@ -20,14 +20,16 @@ use nominal_ffi::asset::{
 };
 use nominal_ffi::client::{nominal_client_free, nominal_client_new};
 use nominal_ffi::error::NominalErrorCode;
-use nominal_ffi::handles::nominal_handle_array_free;
+use nominal_ffi::handles::{
+    nominal_handle_list_count, nominal_handle_list_free, nominal_handle_list_get,
+};
 
 const ASSET_RID: &str = "ri.scout.cerulean-staging.asset.00000000-0000-0000-0000-000000000001";
 const DATASET_RID: &str =
     "ri.catalog.cerulean-staging.dataset.00000000-0000-0000-0000-000000000002";
 const VIDEO_RID: &str = "ri.catalog.cerulean-staging.video.00000000-0000-0000-0000-000000000003";
-// 2024-01-15T10:30:00Z as Unix milliseconds.
-const CREATED_AT_MILLIS: i64 = 1_705_314_600_000;
+// 2024-01-15T10:30:00Z as Unix milliseconds (double — exact, well below 2^53).
+const CREATED_AT_MILLIS: f64 = 1_705_314_600_000.0;
 
 /// A full Conjure-format asset with every field this FFI exposes.
 fn full_asset_json() -> serde_json::Value {
@@ -76,10 +78,10 @@ fn mount(server: &MockServer, mock: Mock) {
     TEST_RT.block_on(mock.mount(server));
 }
 
-fn new_client(server: &MockServer) -> i64 {
+fn new_client(server: &MockServer) -> i32 {
     let token = cstr("test-token");
     let base_url = cstr(&server.uri());
-    let mut handle = 0i64;
+    let mut handle = 0i32;
     let code = nominal_client_new(
         token.as_ptr(),
         std::ptr::null(),
@@ -90,10 +92,10 @@ fn new_client(server: &MockServer) -> i64 {
     handle
 }
 
-fn create_asset(client: i64, name: &str, description: Option<&str>) -> Result<i64, i32> {
+fn create_asset(client: i32, name: &str, description: Option<&str>) -> Result<i32, i32> {
     let name = cstr(name);
     let description = description.map(cstr);
-    let mut asset = 0i64;
+    let mut asset = 0i32;
     let code = nominal_asset_create(
         client,
         name.as_ptr(),
@@ -111,8 +113,8 @@ fn create_asset(client: i64, name: &str, description: Option<&str>) -> Result<i6
 
 /// Reads the description via the size-query pattern, returning
 /// (code, needed, is_present).
-fn query_description(asset: i64) -> (i32, u64, bool) {
-    let mut needed = 0u64;
+fn query_description(asset: i32) -> (i32, u32, bool) {
+    let mut needed = 0u32;
     let mut is_present = false;
     let code =
         nominal_asset_description(asset, std::ptr::null_mut(), 0, &mut needed, &mut is_present);
@@ -152,7 +154,7 @@ fn create_asset_marshals_every_field() {
     assert!(is_present);
     assert_eq!(description, "Qualification flight");
 
-    let mut millis = 0i64;
+    let mut millis = 0f64;
     assert_eq!(nominal_asset_created_at(asset, &mut millis), 0);
     assert_eq!(millis, CREATED_AT_MILLIS);
 
@@ -267,7 +269,7 @@ fn get_asset_by_rid() {
     let client = new_client(&server);
 
     let rid = cstr(ASSET_RID);
-    let mut asset = 0i64;
+    let mut asset = 0i32;
     let code = nominal_asset_get(client, rid.as_ptr(), &mut asset);
     assert_eq!(code, 0, "get failed: {}", last_error());
     let name = read_string(|b, c, n| nominal_asset_name(asset, b, c, n)).unwrap();
@@ -290,7 +292,7 @@ fn get_asset_not_found_maps_to_not_found_code() {
     let client = new_client(&server);
 
     let rid = cstr(ASSET_RID);
-    let mut asset = 0i64;
+    let mut asset = 0i32;
     let code = nominal_asset_get(client, rid.as_ptr(), &mut asset);
     assert_eq!(code, NominalErrorCode::NotFound as i32);
     assert!(last_error().contains("not found"), "got: {}", last_error());
@@ -306,7 +308,7 @@ fn invalid_rid_fails_before_any_request() {
     let client = new_client(&server);
 
     let rid = cstr("not-a-rid");
-    let mut asset = 0i64;
+    let mut asset = 0i32;
     let code = nominal_asset_get(client, rid.as_ptr(), &mut asset);
     assert_eq!(code, NominalErrorCode::InvalidArgument as i32);
 
@@ -349,32 +351,42 @@ fn list_assets_follows_pagination() {
     );
     let client = new_client(&server);
 
-    let mut assets: *mut i64 = std::ptr::null_mut();
-    let mut count: u64 = 0;
-    let code = nominal_asset_list(client, &mut assets, &mut count);
+    let mut list = 0i32;
+    let mut count: u32 = 0;
+    let code = nominal_asset_list(client, &mut list, &mut count);
     assert_eq!(code, 0, "list failed: {}", last_error());
     assert_eq!(count, 2);
 
-    let handles = unsafe { std::slice::from_raw_parts(assets, count as usize) }.to_vec();
+    let mut list_count = 0u32;
+    assert_eq!(nominal_handle_list_count(list, &mut list_count), 0);
+    assert_eq!(list_count, count, "out_count and list count must agree");
+
+    let handles: Vec<i32> = (0..count as i32)
+        .map(|i| {
+            let mut handle = 0i32;
+            assert_eq!(nominal_handle_list_get(list, i, &mut handle), 0);
+            handle
+        })
+        .collect();
     let names: Vec<String> = handles
         .iter()
         .map(|&h| read_string(|b, c, n| nominal_asset_name(h, b, c, n)).unwrap())
         .collect();
     assert_eq!(names, vec!["First", "Second"]);
 
-    assert_eq!(nominal_handle_array_free(assets, count), 0);
+    assert_eq!(nominal_handle_list_free(list), 0);
     for handle in handles {
-        assert_eq!(nominal_asset_free(handle), 0, "handles outlive the array");
+        assert_eq!(nominal_asset_free(handle), 0, "handles outlive the list");
     }
     nominal_client_free(client);
 }
 
 fn search(
-    client: i64,
+    client: i32,
     search_text: Option<&str>,
     label: Option<&str>,
     property: Option<(&str, &str)>,
-) -> Result<Vec<i64>, i32> {
+) -> Result<Vec<i32>, i32> {
     let search_text = search_text.map(cstr);
     let label = label.map(cstr);
     let property_key = property.map(|(k, _)| cstr(k));
@@ -382,22 +394,28 @@ fn search(
     let as_ptr =
         |opt: &Option<std::ffi::CString>| opt.as_ref().map_or(std::ptr::null(), |s| s.as_ptr());
 
-    let mut assets: *mut i64 = std::ptr::null_mut();
-    let mut count: u64 = 0;
+    let mut list = 0i32;
+    let mut count: u32 = 0;
     let code = nominal_asset_search(
         client,
         as_ptr(&search_text),
         as_ptr(&label),
         as_ptr(&property_key),
         as_ptr(&property_value),
-        &mut assets,
+        &mut list,
         &mut count,
     );
     if code != 0 {
         return Err(code);
     }
-    let handles = unsafe { std::slice::from_raw_parts(assets, count as usize) }.to_vec();
-    nominal_handle_array_free(assets, count);
+    let handles = (0..count as i32)
+        .map(|i| {
+            let mut handle = 0i32;
+            assert_eq!(nominal_handle_list_get(list, i, &mut handle), 0);
+            handle
+        })
+        .collect();
+    nominal_handle_list_free(list);
     Ok(handles)
 }
 
@@ -448,15 +466,15 @@ fn search_property_key_without_value_is_rejected() {
     let client = new_client(&server);
 
     let key = cstr("vehicle");
-    let mut assets: *mut i64 = std::ptr::null_mut();
-    let mut count: u64 = 0;
+    let mut list = 0i32;
+    let mut count: u32 = 0;
     let code = nominal_asset_search(
         client,
         std::ptr::null(),
         std::ptr::null(),
         key.as_ptr(),
         std::ptr::null(),
-        &mut assets,
+        &mut list,
         &mut count,
     );
     assert_eq!(code, NominalErrorCode::InvalidArgument as i32);
@@ -482,7 +500,7 @@ fn update_asset_sends_only_set_fields() {
 
     let rid = cstr(ASSET_RID);
     let name = cstr("Renamed");
-    let mut updated = 0i64;
+    let mut updated = 0i32;
     let code = nominal_asset_update(
         client,
         rid.as_ptr(),
@@ -505,7 +523,7 @@ fn update_with_nothing_to_change_is_rejected() {
     let client = new_client(&server);
 
     let rid = cstr(ASSET_RID);
-    let mut updated = 0i64;
+    let mut updated = 0i32;
     let code = nominal_asset_update(
         client,
         rid.as_ptr(),
@@ -604,7 +622,7 @@ fn malformed_response_body_maps_to_error_not_panic() {
 fn asset_calls_reject_invalid_client_handle() {
     let _guard = common::message_lock();
     let rid = cstr(ASSET_RID);
-    let mut out = 0i64;
+    let mut out = 0i32;
     assert_eq!(
         nominal_asset_get(0, rid.as_ptr(), &mut out),
         NominalErrorCode::InvalidHandle as i32

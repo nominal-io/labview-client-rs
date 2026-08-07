@@ -1,4 +1,4 @@
-//! Shared helpers for the integration test suites, which call the exported
+﻿//! Shared helpers for the integration test suites, which call the exported
 //! FFI functions exactly the way LabVIEW would (pointers and buffers in,
 //! codes out) — just from Rust.
 
@@ -22,19 +22,19 @@ pub fn cstr(s: &str) -> CString {
 /// Drives a string getter through the documented two-call pattern: size query
 /// with a null buffer, then the real call. Returns the error code on failure.
 pub fn read_string(
-    mut getter: impl FnMut(*mut c_char, u64, *mut u64) -> i32,
+    mut getter: impl FnMut(*mut c_char, u32, *mut u32) -> i32,
 ) -> Result<String, i32> {
-    let mut needed = 0u64;
+    let mut needed = 0u32;
     let code = getter(std::ptr::null_mut(), 0, &mut needed);
     if code != 0 {
         return Err(code);
     }
     let cap = needed as usize + 1;
     let mut buf = vec![0u8; cap];
-    let mut needed_again = 0u64;
+    let mut needed_again = 0u32;
     let code = getter(
         buf.as_mut_ptr() as *mut c_char,
-        cap as u64,
+        cap as u32,
         &mut needed_again,
     );
     assert_eq!(code, 0, "write call failed after successful size query");
@@ -45,8 +45,8 @@ pub fn read_string(
 
 /// Drives a `_count` getter, returning the error code on failure.
 #[allow(dead_code)] // used by the tier-2 suite only; `common` compiles into both.
-pub fn read_count(mut getter: impl FnMut(*mut u64) -> i32) -> Result<u64, i32> {
-    let mut count = 0u64;
+pub fn read_count(mut getter: impl FnMut(*mut u32) -> i32) -> Result<u32, i32> {
+    let mut count = 0u32;
     let code = getter(&mut count);
     if code != 0 {
         return Err(code);

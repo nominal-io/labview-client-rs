@@ -41,18 +41,26 @@ Every `extern "C"` function's parameters and return value must be one of:
 | Category | Representation |
 |---|---|
 | Boolean | `bool` (C `_Bool`) |
-| Integer / float | `i32`, `i64`, `u32`, `u64`, `f64` |
+| Integer / float | `i32`, `u32`, `f64` — **never `i64`/`u64`**, see below |
 | String (in) | `*const c_char` (null-terminated UTF-8) |
-| String (out) | caller-supplied `*mut c_char` buffer + `u64` capacity + `*mut u64` needed-bytes out-param |
-| Array (in) | `*const T` + `u64` length, `T` itself primitive |
-| Array (out) | caller-supplied buffer + capacity, same pattern as strings |
-| Opaque object | `i64` handle (see Handle Registries) |
+| String (out) | caller-supplied `*mut c_char` buffer + `u32` capacity + `*mut u32` needed-bytes out-param |
+| Array (in) | `*const T` + `u32` length, `T` itself primitive |
+| Array (out) | not permitted — return a handle list instead (see Type Conversion Cookbook) |
+| Opaque object | `i32` handle (see Handle Registries) |
 | Nothing else | not permitted — flatten it |
 
-Sizes, capacities, and counts are always `u64`, never `usize` — `size_t`'s
-width differs between the 32- and 64-bit DLLs, and LabVIEW's Import Shared
-Library wizard cannot resolve that without manual preprocessor definitions
-(which would break the no-manual-patching success criterion).
+**No 64-bit integers cross the FFI boundary, ever.** LabVIEW's Import Shared
+Library wizard cannot parse any 64-bit integer type — not `long long`, not
+`__int64`, not typedefs or `#define`s of either (empirically verified; each
+such parameter imports as an unusable empty cluster, breaking the
+no-manual-patching success criterion). Consequences:
+- Handles are `i32` (two billion per process is ample).
+- Sizes, capacities, counts, and indices are `u32`/`i32` — also never
+  `usize`, whose width differs between the 32- and 64-bit DLLs.
+- Timestamps are `f64` Unix milliseconds (exact for whole milliseconds up to
+  2^53 — about 285,000 years).
+- Anything genuinely 64-bit (IDs, nanosecond timestamps) must cross as a
+  string or be split — prefer strings.
 
 No `#[repr(C)]` structs with embedded pointers, no unions, no nested arrays. If
 a `nominal` type has a field that isn't a primitive, it gets its own getter
@@ -108,10 +116,10 @@ One source file per `nominal` module — mirrors the crate you're wrapping, so
 | `nominal` type | FFI representation |
 |---|---|
 | `String`, `&str` | buffer + capacity (see String Convention) |
-| `HashMap<String, String>` (properties/labels) | `_count(handle) -> i64` + `_key_at(handle, i, buf, cap)` + `_value_at(handle, i, buf, cap)` |
-| `Vec<String>` (labels) | `_count(handle) -> i64` + `_label_at(handle, i, buf, cap)` |
-| `Vec<Asset>` / `Vec<Run>` / etc. (list, search results) | return `*mut i64` array of new handles + out-param length; caller frees with a paired `_free_handle_array` fn |
-| `DateTime<Utc>` | `i64`, Unix **milliseconds** (pick one unit, document it once in `error.rs` or a `conventions.rs` doc comment, never mix) |
+| `HashMap<String, String>` (properties/labels) | `_count(handle, *mut u32)` + `_key_at(handle, i, buf, cap, *mut u32)` + `_value_at(handle, i, buf, cap, *mut u32)` |
+| `Vec<String>` (labels) | `_count(handle, *mut u32)` + `_label_at(handle, i, buf, cap, *mut u32)` |
+| `Vec<Asset>` / `Vec<Run>` / etc. (list, search results) | out-params: an `i32` handle-list handle + `u32` count. Caller reads entries with `nominal_handle_list_get(list, i, *mut i32)` and frees the list with `nominal_handle_list_free` (the resource handles inside outlive the list). Never return a raw array or double pointer — the wizard can't express them. |
+| `DateTime<Utc>` | `f64`, Unix **milliseconds** (pick one unit, document it once in `error.rs`, never mix; `i64` is banned — see Golden Rule) |
 | Enums (`IngestJobStatus`, `ChannelDataType`, etc.) | `i32` discriminant; keep a matching hand-written LabVIEW enum typedef in sync manually |
 | `Option<T>` | for strings: empty buffer + a separate `bool`/`i32` "is_present" out-param. For handles: `0` means absent (reserve handle `0` as never-valid) |
 | Builders (`AssetCreate`, `RunQuery`, etc.) | not exposed directly — each FFI "create" function takes flat primitive args and builds the request type internally, in one function body |
@@ -128,7 +136,7 @@ function:
 /// supported size-query call). Returns BufferTooSmall — writing nothing —
 /// when `buf` is non-null but `cap` < needed + 1; the caller retries with a
 /// buffer of at least (*out_needed + 1) bytes.
-fn write_str_field(value: &str, buf: *mut c_char, cap: u64, out_needed: *mut u64) -> i32 { ... }
+fn write_str_field(value: &str, buf: *mut c_char, cap: u32, out_needed: *mut u32) -> i32 { ... }
 ```
 
 This avoids the ownership/`_free` mismatch class of bugs entirely — no
@@ -151,7 +159,7 @@ On failure, call a global `set_last_error(String)` before returning; expose:
 
 ```rust
 #[no_mangle]
-pub extern "C" fn nominal_last_error(buf: *mut c_char, cap: u64, out_needed: *mut u64) -> i32 { ... }
+pub extern "C" fn nominal_last_error(buf: *mut c_char, cap: u32, out_needed: *mut u32) -> i32 { ... }
 ```
 
 so LabVIEW can fetch the message after a non-zero return — same pattern as
@@ -188,8 +196,8 @@ handle_registry!(RunHandle, nominal::core::Run);
 // ... one line per resource type
 ```
 
-Each invocation expands to a `Lazy<Mutex<HashMap<i64, Arc<T>>>>`, an
-`AtomicI64` counter, and `insert`/`get`/`remove` functions scoped to that type.
+Each invocation expands to a `Lazy<Mutex<HashMap<i32, Arc<T>>>>`, a shared
+`AtomicI32` counter, and `insert`/`get`/`remove` functions scoped to that type.
 Handle `0` is reserved and never issued, so it can double as "null"/"not
 found" in `Option<T>` cases above. Multiple simultaneous `ClientHandle`s must
 be supported (multiple independent connections, potentially different

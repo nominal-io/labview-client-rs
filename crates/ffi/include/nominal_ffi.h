@@ -3,17 +3,20 @@
  * DO NOT EDIT — regenerate with `cargo build -p ffi`.
  *
  * Conventions (see error.rs for full details):
- *   - Action functions return int32_t: 0 = success, non-zero = a
- *     NominalErrorCode value. Fetch the message for the most recent error
- *     with nominal_last_error().
- *   - String and count getters return int64_t: >= 0 is the byte count needed
- *     (strings, excluding the null terminator) or the element count; negative
- *     is a negated NominalErrorCode (e.g. -4 = invalid handle). If the byte
- *     count needed is >= the buffer capacity, nothing was written — retry
- *     with a larger buffer.
- *   - Opaque objects are int64_t handles. Handle 0 is never valid and
- *     doubles as "null"/"absent".
- *   - Timestamps are int64_t Unix milliseconds (UTC).
+ *   - Every function returns int32_t: 0 = success, non-zero = a
+ *     NominalErrorCode value. All results come back through out-parameters.
+ *     Fetch the message for the most recent error with nominal_last_error().
+ *   - Strings out: caller supplies a byte buffer + uint32_t capacity; the
+ *     byte count needed (excluding the null terminator) is stored in a
+ *     uint32_t out-parameter. A null buffer is the supported size query.
+ *     A non-null buffer that is too small returns BufferTooSmall and writes
+ *     nothing — retry with (needed + 1) bytes.
+ *   - Opaque objects are int32_t handles. Handle 0 is never valid and
+ *     doubles as "null"/"absent". _list/_search results are handle lists:
+ *     read with nominal_handle_list_get, free with nominal_handle_list_free.
+ *   - Timestamps are double Unix milliseconds (UTC).
+ *   - No 64-bit integers appear anywhere in this API: LabVIEW's Import
+ *     Shared Library wizard cannot parse them.
  */
 
 #ifndef NOMINAL_FFI_H
@@ -21,7 +24,9 @@
 
 
 /* Self-contained type definitions: LabVIEW's wizard ships no standard
- * headers. Real compilers (MSVC/GCC/Clang) take the #include branch. */
+ * headers. Real compilers (MSVC/GCC/Clang) take the #include branch.
+ * Only 8/16/32-bit types appear here — LabVIEW's wizard cannot parse any
+ * 64-bit integer type, which is why this API defines none. */
 #ifdef _MSC_VER
 #include <stdint.h>
 #include <stdbool.h>
@@ -30,13 +35,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 #else
-/* The 64-bit types are #defines, not typedefs, on purpose: LabVIEW's
- * wizard recognizes `__int64` in declarations but silently fails to learn
- * 64-bit types through typedef (each such parameter imports as an unusable
- * empty cluster). The preprocessor substitutes the spelling it understands
- * directly into every signature. */
-#define int64_t  __int64
-#define uint64_t unsigned __int64
 typedef signed char    int8_t;
 typedef unsigned char  uint8_t;
 typedef short          int16_t;
@@ -135,29 +133,30 @@ typedef int32_t NominalDataSourceType;
  description, writing the new asset's handle to `out_asset`.
  Free with `nominal_asset_free`.
  */
-int32_t nominal_asset_create(int64_t client,
+int32_t nominal_asset_create(int32_t client,
                              const char *name,
                              const char *description,
-                             int64_t *out_asset);
+                             int32_t *out_asset);
 
 /*
  Fetches the asset with the given RID, writing its handle to `out_asset`.
  Free with `nominal_asset_free`.
  */
-int32_t nominal_asset_get(int64_t client, const char *rid, int64_t *out_asset);
+int32_t nominal_asset_get(int32_t client, const char *rid, int32_t *out_asset);
 
 /*
- Lists all assets (newest first), returning an array of new asset handles.
+ Lists all assets (newest first), returning a handle list.
 
- On success `*out_assets` points to an array of `*out_count` handles. Free
- the array with `nominal_handle_array_free`; free each handle in it with
- `nominal_asset_free`.
+ On success `*out_list` is a handle list of `*out_count` asset handles —
+ read them with `nominal_handle_list_get` and free the list with
+ `nominal_handle_list_free`. Each asset handle stays valid until passed to
+ `nominal_asset_free`, independent of the list.
  */
-int32_t nominal_asset_list(int64_t client, int64_t **out_assets, uint64_t *out_count);
+int32_t nominal_asset_list(int32_t client, int32_t *out_list, uint32_t *out_count);
 
 /*
- Searches assets, returning an array of new asset handles (see
- `nominal_asset_list` for ownership).
+ Searches assets, returning a handle list (see `nominal_asset_list` for
+ ownership).
 
  Filters may each be null or empty ("no filter"); the ones provided are
  combined with AND:
@@ -165,13 +164,13 @@ int32_t nominal_asset_list(int64_t client, int64_t **out_assets, uint64_t *out_c
  - `label`: exact label match
  - `property_key` + `property_value`: property match (both or neither)
  */
-int32_t nominal_asset_search(int64_t client,
+int32_t nominal_asset_search(int32_t client,
                              const char *search_text,
                              const char *label,
                              const char *property_key,
                              const char *property_value,
-                             int64_t **out_assets,
-                             uint64_t *out_count);
+                             int32_t *out_list,
+                             uint32_t *out_count);
 
 /*
  Updates an asset's name and/or description. Null or empty arguments leave
@@ -179,130 +178,133 @@ int32_t nominal_asset_search(int64_t client,
  (free with `nominal_asset_free`); handles to the old version stay valid
  but keep their stale field values.
  */
-int32_t nominal_asset_update(int64_t client,
+int32_t nominal_asset_update(int32_t client,
                              const char *rid,
                              const char *name,
                              const char *description,
-                             int64_t *out_asset);
+                             int32_t *out_asset);
 
 /*
  Archives an asset (hidden from the UI, not deleted).
  */
-int32_t nominal_asset_archive(int64_t client, const char *rid);
+int32_t nominal_asset_archive(int32_t client, const char *rid);
 
 /*
  Unarchives an asset, restoring its visibility in the UI.
  */
-int32_t nominal_asset_unarchive(int64_t client, const char *rid);
+int32_t nominal_asset_unarchive(int32_t client, const char *rid);
 
 /*
  Frees an asset handle. Freeing twice returns an error.
  */
-int32_t nominal_asset_free(int64_t asset);
+int32_t nominal_asset_free(int32_t asset);
 
 /*
  Writes the asset's RID into `buf`, storing the byte count needed in
  `out_needed`.
  */
-int32_t nominal_asset_rid(int64_t asset, char *buf, uint64_t cap, uint64_t *out_needed);
+int32_t nominal_asset_rid(int32_t asset, char *buf, uint32_t cap, uint32_t *out_needed);
 
 /*
  Writes the asset's name into `buf`, storing the byte count needed in
  `out_needed`.
  */
-int32_t nominal_asset_name(int64_t asset, char *buf, uint64_t cap, uint64_t *out_needed);
+int32_t nominal_asset_name(int32_t asset, char *buf, uint32_t cap, uint32_t *out_needed);
 
 /*
  Writes the asset's description into `buf`, and whether one is set into
  `is_present` (an absent description reports 0 bytes needed).
  */
-int32_t nominal_asset_description(int64_t asset,
+int32_t nominal_asset_description(int32_t asset,
                                   char *buf,
-                                  uint64_t cap,
-                                  uint64_t *out_needed,
+                                  uint32_t cap,
+                                  uint32_t *out_needed,
                                   bool *is_present);
 
 /*
  Writes the URL for viewing this asset in the Nominal web app into `buf`,
  storing the byte count needed in `out_needed`.
  */
-int32_t nominal_asset_url(int64_t asset, char *buf, uint64_t cap, uint64_t *out_needed);
+int32_t nominal_asset_url(int32_t asset, char *buf, uint32_t cap, uint32_t *out_needed);
 
 /*
- Writes the asset's creation time to `out_millis` as Unix milliseconds (UTC).
+ Writes the asset's creation time to `out_millis` as Unix milliseconds
+ (UTC), as a `double` — exact for whole milliseconds up to 2^53 (LabVIEW's
+ import wizard cannot parse 64-bit integer types, so `i64` is not an
+ option here).
  */
-int32_t nominal_asset_created_at(int64_t asset, int64_t *out_millis);
+int32_t nominal_asset_created_at(int32_t asset, double *out_millis);
 
 /*
  Stores the number of properties on the asset in `out_count`.
  */
-int32_t nominal_asset_property_count(int64_t asset, uint64_t *out_count);
+int32_t nominal_asset_property_count(int32_t asset, uint32_t *out_count);
 
 /*
  Writes the key of the property at `index` (0-based, sorted-key order) into
  `buf`, storing the byte count needed in `out_needed`.
  */
-int32_t nominal_asset_property_key_at(int64_t asset,
-                                      int64_t index,
+int32_t nominal_asset_property_key_at(int32_t asset,
+                                      int32_t index,
                                       char *buf,
-                                      uint64_t cap,
-                                      uint64_t *out_needed);
+                                      uint32_t cap,
+                                      uint32_t *out_needed);
 
 /*
  Writes the value of the property at `index` (0-based, sorted-key order)
  into `buf`, storing the byte count needed in `out_needed`.
  */
-int32_t nominal_asset_property_value_at(int64_t asset,
-                                        int64_t index,
+int32_t nominal_asset_property_value_at(int32_t asset,
+                                        int32_t index,
                                         char *buf,
-                                        uint64_t cap,
-                                        uint64_t *out_needed);
+                                        uint32_t cap,
+                                        uint32_t *out_needed);
 
 /*
  Stores the number of labels on the asset in `out_count`.
  */
-int32_t nominal_asset_label_count(int64_t asset, uint64_t *out_count);
+int32_t nominal_asset_label_count(int32_t asset, uint32_t *out_count);
 
 /*
  Writes the label at `index` (0-based) into `buf`, storing the byte count
  needed in `out_needed`.
  */
-int32_t nominal_asset_label_at(int64_t asset,
-                               int64_t index,
+int32_t nominal_asset_label_at(int32_t asset,
+                               int32_t index,
                                char *buf,
-                               uint64_t cap,
-                               uint64_t *out_needed);
+                               uint32_t cap,
+                               uint32_t *out_needed);
 
 /*
  Stores the number of data sources attached to the asset in `out_count`.
  */
-int32_t nominal_asset_data_source_count(int64_t asset, uint64_t *out_count);
+int32_t nominal_asset_data_source_count(int32_t asset, uint32_t *out_count);
 
 /*
  Writes the scope name of the data source at `index` (0-based, sorted-name
  order) into `buf`, storing the byte count needed in `out_needed`.
  */
-int32_t nominal_asset_data_source_name_at(int64_t asset,
-                                          int64_t index,
+int32_t nominal_asset_data_source_name_at(int32_t asset,
+                                          int32_t index,
                                           char *buf,
-                                          uint64_t cap,
-                                          uint64_t *out_needed);
+                                          uint32_t cap,
+                                          uint32_t *out_needed);
 
 /*
  Writes the RID of the data source at `index` (0-based, sorted-name order)
  into `buf`, storing the byte count needed in `out_needed`.
  */
-int32_t nominal_asset_data_source_rid_at(int64_t asset,
-                                         int64_t index,
+int32_t nominal_asset_data_source_rid_at(int32_t asset,
+                                         int32_t index,
                                          char *buf,
-                                         uint64_t cap,
-                                         uint64_t *out_needed);
+                                         uint32_t cap,
+                                         uint32_t *out_needed);
 
 /*
  Writes the kind of the data source at `index` (0-based, sorted-name order)
  to `out_type` as a `NominalDataSourceType` value.
  */
-int32_t nominal_asset_data_source_type_at(int64_t asset, int64_t index, int32_t *out_type);
+int32_t nominal_asset_data_source_type_at(int32_t asset, int32_t index, int32_t *out_type);
 
 /*
  Creates a Nominal API client and writes its handle to `out_client`.
@@ -317,30 +319,30 @@ int32_t nominal_asset_data_source_type_at(int64_t asset, int64_t index, int32_t 
 int32_t nominal_client_new(const char *token,
                            const char *workspace_rid,
                            const char *base_url,
-                           int64_t *out_client);
+                           int32_t *out_client);
 
 /*
  Frees a client handle. The handle is invalid afterwards; freeing twice
  returns an error. Asset (and other resource) handles obtained through this
  client stay valid — they hold their own data.
  */
-int32_t nominal_client_free(int64_t client);
+int32_t nominal_client_free(int32_t client);
 
 /*
  Writes the client's API base URL into `buf` (capacity `cap` bytes),
  storing the byte count needed in `out_needed` — see the string convention
  in the header preamble.
  */
-int32_t nominal_client_base_url(int64_t client, char *buf, uint64_t cap, uint64_t *out_needed);
+int32_t nominal_client_base_url(int32_t client, char *buf, uint32_t cap, uint32_t *out_needed);
 
 /*
  Writes the client's workspace RID into `buf` and whether one is configured
  into `is_present` (an absent workspace reports 0 bytes needed).
  */
-int32_t nominal_client_workspace_rid(int64_t client,
+int32_t nominal_client_workspace_rid(int32_t client,
                                      char *buf,
-                                     uint64_t cap,
-                                     uint64_t *out_needed,
+                                     uint32_t cap,
+                                     uint32_t *out_needed,
                                      bool *is_present);
 
 /*
@@ -352,14 +354,23 @@ int32_t nominal_client_workspace_rid(int64_t client,
  small, returns `BufferTooSmall` WITHOUT overwriting the stored message —
  retry with a buffer of at least (`*out_needed` + 1) bytes.
  */
-int32_t nominal_last_error(char *buf, uint64_t cap, uint64_t *out_needed);
+int32_t nominal_last_error(char *buf, uint32_t cap, uint32_t *out_needed);
 
 /*
- Frees a handle array previously returned by a `_list`/`_search` function.
- Frees only the array itself — the handles inside remain valid until passed
- to their own `_free` function. `count` must be exactly the count the array
- was returned with. A null `ptr` with `count` 0 is a no-op.
+ Stores the number of handles in the list in `out_count`.
  */
-int32_t nominal_handle_array_free(int64_t *ptr, uint64_t count);
+int32_t nominal_handle_list_count(int32_t list, uint32_t *out_count);
+
+/*
+ Stores the handle at `index` (0-based) in `out_handle`.
+ */
+int32_t nominal_handle_list_get(int32_t list, int32_t index, int32_t *out_handle);
+
+/*
+ Frees a handle list previously returned by a `_list`/`_search` function.
+ Frees only the list itself — the handles inside remain valid until passed
+ to their own `_free` function. Freeing twice returns an error.
+ */
+int32_t nominal_handle_list_free(int32_t list);
 
 #endif  /* NOMINAL_FFI_H */

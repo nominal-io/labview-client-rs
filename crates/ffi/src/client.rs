@@ -1,4 +1,4 @@
-//! `nominal_client_*` — connect/disconnect and client introspection.
+﻿//! `nominal_client_*` — connect/disconnect and client introspection.
 //!
 //! Built via `NominalClient::builder(token)` with explicit arguments, never
 //! the profile-file path. Multiple simultaneous clients are supported.
@@ -26,7 +26,7 @@ pub extern "C" fn nominal_client_new(
     token: *const c_char,
     workspace_rid: *const c_char,
     base_url: *const c_char,
-    out_client: *mut i64,
+    out_client: *mut i32,
 ) -> i32 {
     guard(|| {
         let token = match read_required_str(token, "token") {
@@ -68,7 +68,7 @@ pub extern "C" fn nominal_client_new(
 /// returns an error. Asset (and other resource) handles obtained through this
 /// client stay valid — they hold their own data.
 #[no_mangle]
-pub extern "C" fn nominal_client_free(client: i64) -> i32 {
+pub extern "C" fn nominal_client_free(client: i32) -> i32 {
     guard(|| {
         if ClientHandle::remove(client) {
             0
@@ -86,10 +86,10 @@ pub extern "C" fn nominal_client_free(client: i64) -> i32 {
 /// in the header preamble.
 #[no_mangle]
 pub extern "C" fn nominal_client_base_url(
-    client: i64,
+    client: i32,
     buf: *mut c_char,
-    cap: u64,
-    out_needed: *mut u64,
+    cap: u32,
+    out_needed: *mut u32,
 ) -> i32 {
     guard(|| {
         let client = lookup_handle!(ClientHandle, client);
@@ -101,10 +101,10 @@ pub extern "C" fn nominal_client_base_url(
 /// into `is_present` (an absent workspace reports 0 bytes needed).
 #[no_mangle]
 pub extern "C" fn nominal_client_workspace_rid(
-    client: i64,
+    client: i32,
     buf: *mut c_char,
-    cap: u64,
-    out_needed: *mut u64,
+    cap: u32,
+    out_needed: *mut u32,
     is_present: *mut bool,
 ) -> i32 {
     guard(|| {

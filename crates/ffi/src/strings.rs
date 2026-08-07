@@ -1,11 +1,11 @@
-//! Shared helpers for strings crossing the FFI boundary.
+﻿//! Shared helpers for strings crossing the FFI boundary.
 //!
 //! Outgoing strings use a caller-supplied buffer, Win32-style — no allocation
 //! ever crosses the boundary, so there is no `_free` to mismatch. Every
 //! function returns an `i32` status code; the byte count needed comes back
-//! through a `*mut u64` out-parameter (never `usize`/`size_t` — its width
-//! differs between the 32- and 64-bit DLLs, which LabVIEW's Import Shared
-//! Library wizard can't express without manual preprocessor definitions).
+//! through a `*mut u32` out-parameter. `u32`, never `usize`/`size_t` (width
+//! differs between the 32- and 64-bit DLLs) and never `u64` (LabVIEW's
+//! Import Shared Library wizard cannot parse 64-bit integer types at all).
 
 use std::os::raw::c_char;
 
@@ -22,16 +22,16 @@ use crate::error::{fail, NominalErrorCode};
 /// Does NOT touch the last-error message — `nominal_last_error` itself uses
 /// this helper, and overwriting the message it is trying to report would lose
 /// the original error. Getters wanting a message use [`write_str_field`].
-pub(crate) fn write_str_out(value: &str, buf: *mut c_char, cap: u64, out_needed: *mut u64) -> i32 {
+pub(crate) fn write_str_out(value: &str, buf: *mut c_char, cap: u32, out_needed: *mut u32) -> i32 {
     let bytes = value.as_bytes();
     if !out_needed.is_null() {
         // SAFETY: out_needed is non-null and caller-owned.
-        unsafe { *out_needed = bytes.len() as u64 };
+        unsafe { *out_needed = bytes.len() as u32 };
     }
     if buf.is_null() {
         return NominalErrorCode::Ok as i32;
     }
-    if bytes.len() as u64 >= cap {
+    if bytes.len() as u32 >= cap {
         return NominalErrorCode::BufferTooSmall as i32;
     }
     // SAFETY: buf is non-null and the caller promises cap writable bytes;
@@ -48,8 +48,8 @@ pub(crate) fn write_str_out(value: &str, buf: *mut c_char, cap: u64, out_needed:
 pub(crate) fn write_str_field(
     value: &str,
     buf: *mut c_char,
-    cap: u64,
-    out_needed: *mut u64,
+    cap: u32,
+    out_needed: *mut u32,
 ) -> i32 {
     let code = write_str_out(value, buf, cap, out_needed);
     if code == NominalErrorCode::BufferTooSmall as i32 {
@@ -69,8 +69,8 @@ pub(crate) fn write_str_field(
 pub(crate) fn write_opt_str_field(
     value: Option<&str>,
     buf: *mut c_char,
-    cap: u64,
-    out_needed: *mut u64,
+    cap: u32,
+    out_needed: *mut u32,
     is_present: *mut bool,
 ) -> i32 {
     if !is_present.is_null() {
@@ -114,13 +114,13 @@ pub(crate) fn read_optional_str(ptr: *const c_char, arg: &str) -> Result<Option<
 mod tests {
     use super::*;
 
-    fn write_to(value: &str, cap: usize) -> (i32, u64, Vec<u8>) {
+    fn write_to(value: &str, cap: usize) -> (i32, u32, Vec<u8>) {
         let mut buf = vec![0xAAu8; cap];
-        let mut needed = 0u64;
+        let mut needed = 0u32;
         let code = write_str_out(
             value,
             buf.as_mut_ptr() as *mut c_char,
-            cap as u64,
+            cap as u32,
             &mut needed,
         );
         (code, needed, buf)
@@ -165,7 +165,7 @@ mod tests {
 
     #[test]
     fn null_buffer_is_a_size_query_not_an_error() {
-        let mut needed = 0u64;
+        let mut needed = 0u32;
         let code = write_str_out("hello", std::ptr::null_mut(), 0, &mut needed);
         assert_eq!((code, needed), (0, 5));
     }
@@ -174,11 +174,11 @@ mod tests {
     fn buffer_too_small_sets_message_via_field_variant() {
         let _guard = crate::error::test_message_lock();
         let mut buf = [0u8; 2];
-        let mut needed = 0u64;
+        let mut needed = 0u32;
         let code = write_str_field(
             "hello",
             buf.as_mut_ptr() as *mut c_char,
-            buf.len() as u64,
+            buf.len() as u32,
             &mut needed,
         );
         assert_eq!(code, NominalErrorCode::BufferTooSmall as i32);
@@ -188,12 +188,12 @@ mod tests {
     #[test]
     fn optional_present_and_absent() {
         let mut is_present = false;
-        let mut needed = 0u64;
+        let mut needed = 0u32;
         let mut buf = [0u8; 8];
         let code = write_opt_str_field(
             Some("hi"),
             buf.as_mut_ptr() as *mut c_char,
-            buf.len() as u64,
+            buf.len() as u32,
             &mut needed,
             &mut is_present,
         );
@@ -203,7 +203,7 @@ mod tests {
         let code = write_opt_str_field(
             None,
             buf.as_mut_ptr() as *mut c_char,
-            buf.len() as u64,
+            buf.len() as u32,
             &mut needed,
             &mut is_present,
         );

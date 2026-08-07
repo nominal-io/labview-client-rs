@@ -1,4 +1,4 @@
-//! Tier 1: client construction and handle lifecycle, no network involved
+﻿//! Tier 1: client construction and handle lifecycle, no network involved
 //! (`nominal_client_new` performs no I/O — it only validates its arguments).
 
 mod common;
@@ -12,11 +12,11 @@ use nominal_ffi::error::NominalErrorCode;
 const WORKSPACE_RID: &str =
     "ri.security.cerulean-staging.workspace.00000000-0000-0000-0000-00000000aaaa";
 
-fn new_client(workspace_rid: Option<&str>, base_url: Option<&str>) -> Result<i64, i32> {
+fn new_client(workspace_rid: Option<&str>, base_url: Option<&str>) -> Result<i32, i32> {
     let token = cstr("test-token");
     let workspace = workspace_rid.map(cstr);
     let base = base_url.map(cstr);
-    let mut handle = 0i64;
+    let mut handle = 0i32;
     let code = nominal_client_new(
         token.as_ptr(),
         workspace.as_ref().map_or(std::ptr::null(), |s| s.as_ptr()),
@@ -31,8 +31,8 @@ fn new_client(workspace_rid: Option<&str>, base_url: Option<&str>) -> Result<i64
 }
 
 /// Size-queries the workspace RID getter, returning (code, needed, is_present).
-fn query_workspace_rid(client: i64) -> (i32, u64, bool) {
-    let mut needed = 0u64;
+fn query_workspace_rid(client: i32) -> (i32, u32, bool) {
+    let mut needed = 0u32;
     let mut is_present = false;
     let code = nominal_client_workspace_rid(
         client,
@@ -56,7 +56,7 @@ fn client_lifecycle_and_getters() {
 
     let (code, needed, is_present) = query_workspace_rid(client);
     assert_eq!(code, 0);
-    assert_eq!(needed, WORKSPACE_RID.len() as u64);
+    assert_eq!(needed, WORKSPACE_RID.len() as u32);
     assert!(is_present);
 
     assert_eq!(nominal_client_free(client), 0);
@@ -88,15 +88,15 @@ fn too_small_buffer_reports_needed_bytes() {
     let client = new_client(None, Some("http://127.0.0.1:1/api")).unwrap();
 
     let mut buf = [0xAAu8; 4];
-    let mut needed = 0u64;
+    let mut needed = 0u32;
     let code = nominal_client_base_url(
         client,
         buf.as_mut_ptr() as *mut std::os::raw::c_char,
-        buf.len() as u64,
+        buf.len() as u32,
         &mut needed,
     );
     assert_eq!(code, NominalErrorCode::BufferTooSmall as i32);
-    assert_eq!(needed, "http://127.0.0.1:1/api".len() as u64);
+    assert_eq!(needed, "http://127.0.0.1:1/api".len() as u32);
     assert_eq!(buf, [0xAAu8; 4], "buffer must be untouched when too small");
 
     nominal_client_free(client);
@@ -105,7 +105,7 @@ fn too_small_buffer_reports_needed_bytes() {
 #[test]
 fn null_token_is_rejected() {
     let _guard = common::message_lock();
-    let mut handle = 0i64;
+    let mut handle = 0i32;
     let code = nominal_client_new(
         std::ptr::null(),
         std::ptr::null(),
@@ -121,7 +121,7 @@ fn invalid_token_is_rejected() {
     let _guard = common::message_lock();
     // Bearer tokens must not contain spaces.
     let token = cstr("not a valid token");
-    let mut handle = 0i64;
+    let mut handle = 0i32;
     let code = nominal_client_new(
         token.as_ptr(),
         std::ptr::null(),
@@ -163,7 +163,7 @@ fn null_out_param_is_rejected() {
 #[test]
 fn getters_reject_invalid_handles() {
     let _guard = common::message_lock();
-    for handle in [0i64, -1, 999_999_999] {
+    for handle in [0i32, -1, 999_999_999] {
         let err = read_string(|buf, cap, needed| nominal_client_base_url(handle, buf, cap, needed))
             .unwrap_err();
         assert_eq!(err, NominalErrorCode::InvalidHandle as i32);
