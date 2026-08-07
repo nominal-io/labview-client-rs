@@ -7,6 +7,12 @@
 		<Item Name="Error Converter (ErrCode or Status).vi" Type="VI" URL="../subvi/Error Converter (ErrCode or Status).vi"/>
 	</Item>
 	<Item Name="nominal asset archive.vi" Type="VI" URL="../VIs/nominal asset archive.vi"/>
+	<Item Name="nominal asset create add label.vi" Type="VI" URL="../VIs/nominal asset create add label.vi"/>
+	<Item Name="nominal asset create begin.vi" Type="VI" URL="../VIs/nominal asset create begin.vi"/>
+	<Item Name="nominal asset create commit.vi" Type="VI" URL="../VIs/nominal asset create commit.vi"/>
+	<Item Name="nominal asset create free.vi" Type="VI" URL="../VIs/nominal asset create free.vi"/>
+	<Item Name="nominal asset create set description.vi" Type="VI" URL="../VIs/nominal asset create set description.vi"/>
+	<Item Name="nominal asset create set property.vi" Type="VI" URL="../VIs/nominal asset create set property.vi"/>
 	<Item Name="nominal asset create.vi" Type="VI" URL="../VIs/nominal asset create.vi"/>
 	<Item Name="nominal asset created at.vi" Type="VI" URL="../VIs/nominal asset created at.vi"/>
 	<Item Name="nominal asset data source count.vi" Type="VI" URL="../VIs/nominal asset data source count.vi"/>
@@ -26,6 +32,13 @@
 	<Item Name="nominal asset rid.vi" Type="VI" URL="../VIs/nominal asset rid.vi"/>
 	<Item Name="nominal asset search.vi" Type="VI" URL="../VIs/nominal asset search.vi"/>
 	<Item Name="nominal asset unarchive.vi" Type="VI" URL="../VIs/nominal asset unarchive.vi"/>
+	<Item Name="nominal asset update add label.vi" Type="VI" URL="../VIs/nominal asset update add label.vi"/>
+	<Item Name="nominal asset update begin.vi" Type="VI" URL="../VIs/nominal asset update begin.vi"/>
+	<Item Name="nominal asset update commit.vi" Type="VI" URL="../VIs/nominal asset update commit.vi"/>
+	<Item Name="nominal asset update free.vi" Type="VI" URL="../VIs/nominal asset update free.vi"/>
+	<Item Name="nominal asset update set description.vi" Type="VI" URL="../VIs/nominal asset update set description.vi"/>
+	<Item Name="nominal asset update set name.vi" Type="VI" URL="../VIs/nominal asset update set name.vi"/>
+	<Item Name="nominal asset update set property.vi" Type="VI" URL="../VIs/nominal asset update set property.vi"/>
 	<Item Name="nominal asset update.vi" Type="VI" URL="../VIs/nominal asset update.vi"/>
 	<Item Name="nominal asset url.vi" Type="VI" URL="../VIs/nominal asset url.vi"/>
 	<Item Name="nominal client base url.vi" Type="VI" URL="../VIs/nominal client base url.vi"/>
