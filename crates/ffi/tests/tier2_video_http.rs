@@ -398,3 +398,48 @@ fn video_calls_reject_invalid_handles() {
     let err = read_string(|b, c, n| nominal_video_name(999_999_999, b, c, n)).unwrap_err();
     assert_eq!(err, NominalErrorCode::InvalidHandle as i32);
 }
+
+use nominal_ffi::handles::{nominal_rid_list_add, nominal_rid_list_begin, nominal_rid_list_free};
+use nominal_ffi::video::nominal_video_get_batch;
+
+#[test]
+fn get_batch_returns_handles_sorted_by_rid() {
+    let rid_b = VIDEO_RID.replace("0003", "0007");
+    let server = start_server();
+    mount(
+        &server,
+        Mock::given(method("POST"))
+            .and(path("/video/v1/videos/batchGet"))
+            .and(body_partial_json(json!({"videoRids": [VIDEO_RID, rid_b]})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "responses": [
+                    minimal_video_json(&rid_b, "Bravo"),
+                    minimal_video_json(VIDEO_RID, "Alpha"),
+                ]
+            }))),
+    );
+    let client = new_client(&server);
+
+    let mut rid_list = 0i32;
+    assert_eq!(nominal_rid_list_begin(&mut rid_list), 0);
+    for rid in [VIDEO_RID, rid_b.as_str()] {
+        let rid = cstr(rid);
+        assert_eq!(nominal_rid_list_add(rid_list, rid.as_ptr()), 0);
+    }
+
+    let mut list = 0i32;
+    let mut count = 0u32;
+    let code = nominal_video_get_batch(client, rid_list, &mut list, &mut count);
+    assert_eq!(code, 0, "get_batch failed: {}", last_error());
+    assert_eq!(count, 2);
+
+    let mut handle = 0i32;
+    assert_eq!(nominal_handle_list_get(list, 0, &mut handle), 0);
+    let rid0 = read_string(|b, c, n| nominal_video_rid(handle, b, c, n)).unwrap();
+    assert_eq!(rid0, VIDEO_RID);
+    nominal_video_free(handle);
+
+    assert_eq!(nominal_handle_list_free(list), 0);
+    assert_eq!(nominal_rid_list_free(rid_list), 0);
+    nominal_client_free(client);
+}

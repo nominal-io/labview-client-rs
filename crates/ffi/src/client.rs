@@ -1,7 +1,9 @@
 ﻿//! `nominal_client_*` — connect/disconnect and client introspection.
 //!
-//! Built via `NominalClient::builder(token)` with explicit arguments, never
-//! the profile-file path. Multiple simultaneous clients are supported.
+//! Built via `NominalClient::builder(token)` with explicit arguments as the
+//! primary path; `nominal_client_new_from_profile`/`_from_profile_env` are
+//! sanctioned secondary constructors for machines with a `nominal` CLI
+//! config file. Multiple simultaneous clients are supported.
 
 use std::os::raw::c_char;
 
@@ -54,6 +56,70 @@ pub extern "C" fn nominal_client_new(
         }
 
         match builder.build() {
+            Ok(client) => {
+                // SAFETY: out_client checked non-null above; caller owns it.
+                unsafe { *out_client = ClientHandle::insert(client) };
+                0
+            }
+            Err(err) => fail_sdk(err),
+        }
+    })
+}
+
+/// Creates a client from the named profile in the Nominal config file
+/// (`~/.config/nominal/config.yml`, as written by the `nominal` CLI's auth
+/// flow), writing its handle to `out_client`. Secondary constructor —
+/// `nominal_client_new` with an explicit token is the primary path. Fails
+/// if the config file is missing or the profile name isn't in it.
+///
+/// Free with `nominal_client_free`.
+#[no_mangle]
+pub extern "C" fn nominal_client_new_from_profile(
+    name: *const c_char,
+    out_client: *mut i32,
+) -> i32 {
+    guard(|| {
+        let name = match read_required_str(name, "name") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if name.is_empty() {
+            return fail(NominalErrorCode::InvalidArgument, "name must not be empty");
+        }
+        if out_client.is_null() {
+            return fail(
+                NominalErrorCode::NullArgument,
+                "out_client must not be null",
+            );
+        }
+
+        match NominalClient::from_profile(&name) {
+            Ok(client) => {
+                // SAFETY: out_client checked non-null above; caller owns it.
+                unsafe { *out_client = ClientHandle::insert(client) };
+                0
+            }
+            Err(err) => fail_sdk(err),
+        }
+    })
+}
+
+/// Creates a client from the profile named by the `NOMINAL_PROFILE`
+/// environment variable — `nominal_client_new_from_profile` with the name
+/// taken from the environment. Fails if the variable is unset.
+///
+/// Free with `nominal_client_free`.
+#[no_mangle]
+pub extern "C" fn nominal_client_new_from_profile_env(out_client: *mut i32) -> i32 {
+    guard(|| {
+        if out_client.is_null() {
+            return fail(
+                NominalErrorCode::NullArgument,
+                "out_client must not be null",
+            );
+        }
+
+        match NominalClient::from_profile_env() {
             Ok(client) => {
                 // SAFETY: out_client checked non-null above; caller owns it.
                 unsafe { *out_client = ClientHandle::insert(client) };

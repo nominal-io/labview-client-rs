@@ -15,7 +15,9 @@ use nominal::core::{Dataset, DatasetCreate, DatasetQuery, DatasetUpdate};
 
 use crate::client::ClientHandle;
 use crate::error::{fail, fail_sdk, guard, NominalErrorCode};
-use crate::handles::{handle_registry, insert_handle_list, lookup_handle};
+use crate::handles::{
+    handle_registry, insert_handle_list, lookup_handle, rid_list_snapshot, RidListHandle,
+};
 use crate::runtime::block_on;
 use crate::strings::{read_optional_str, read_required_str, write_opt_str_field, write_str_field};
 
@@ -936,6 +938,51 @@ pub extern "C" fn nominal_dataset_label_at(
         match usize::try_from(index).ok().and_then(|i| labels.get(i)) {
             Some(label) => write_str_field(label, buf, cap, out_needed),
             None => index_error(index, labels.len()),
+        }
+    })
+}
+
+/// Fetches every dataset named in the `rid_list` staging handle (see
+/// `nominal_rid_list_begin`) in one API call, writing a handle list to
+/// `out_list` and its size to `out_count` (same ownership rules as the
+/// `_list`/`_search` functions). RIDs not found are omitted, and results
+/// arrive sorted by RID — NOT in input order — so match entries by
+/// `nominal_dataset_rid`, never by index. The RID list is not consumed.
+#[no_mangle]
+pub extern "C" fn nominal_dataset_get_batch(
+    client: i32,
+    rid_list: i32,
+    out_list: *mut i32,
+    out_count: *mut u32,
+) -> i32 {
+    guard(|| {
+        let client = lookup_handle!(ClientHandle, client);
+        let rid_list = lookup_handle!(RidListHandle, rid_list);
+        if out_list.is_null() || out_count.is_null() {
+            return fail(
+                NominalErrorCode::NullArgument,
+                "out_list and out_count must not be null",
+            );
+        }
+        let rids = rid_list_snapshot(&rid_list);
+
+        match block_on(client.catalog().get_dataset_batch(&rids)) {
+            Ok(map) => {
+                let mut entries: Vec<_> = map.into_iter().collect();
+                entries.sort_by(|(a, _), (b, _)| a.cmp(b));
+                let handles: Vec<i32> = entries
+                    .into_iter()
+                    .map(|(_, value)| DatasetHandle::insert(value))
+                    .collect();
+                let count = handles.len() as u32;
+                // SAFETY: out pointers checked non-null above; caller owns them.
+                unsafe {
+                    *out_list = insert_handle_list(handles);
+                    *out_count = count;
+                }
+                0
+            }
+            Err(err) => fail_sdk(err),
         }
     })
 }

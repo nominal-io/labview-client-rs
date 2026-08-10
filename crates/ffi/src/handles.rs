@@ -9,7 +9,11 @@
 //! macro. Handle `0` is reserved and never issued, so it doubles as
 //! "null"/"absent". Handles are process-global and thread-safe.
 
+use std::os::raw::c_char;
+use std::sync::Mutex;
+
 use crate::error::{fail, guard, NominalErrorCode};
+use crate::strings::read_required_str;
 
 /// Generates a handle registry for one resource type:
 /// a `Lazy<Mutex<HashMap<i32, Arc<T>>>>`, a shared `AtomicI32` counter, and
@@ -180,6 +184,69 @@ pub extern "C" fn nominal_handle_list_free(list: i32) -> i32 {
     })
 }
 
+// A staging list of RID strings, shared by every `_get_batch` function — the
+// input-side counterpart of the handle list above. A C string array (char**)
+// has no LabVIEW representation, so RIDs accumulate one call at a time.
+handle_registry!(RidListHandle, Mutex<Vec<String>>);
+
+/// Snapshot of the RIDs staged on `handle` — used by the `_get_batch`
+/// functions after their own `lookup_handle!`.
+pub(crate) fn rid_list_snapshot(list: &Mutex<Vec<String>>) -> Vec<String> {
+    list.lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .clone()
+}
+
+/// Starts staging a list of RIDs for a `_get_batch` call. Add RIDs one at a
+/// time with `nominal_rid_list_add`, pass the handle to any `_get_batch`
+/// function (it is not consumed — one list can serve several calls), and
+/// free it with `nominal_rid_list_free`.
+#[no_mangle]
+pub extern "C" fn nominal_rid_list_begin(out_list: *mut i32) -> i32 {
+    guard(|| {
+        if out_list.is_null() {
+            return fail(NominalErrorCode::NullArgument, "out_list must not be null");
+        }
+        // SAFETY: out_list checked non-null above; caller owns it.
+        unsafe { *out_list = RidListHandle::insert(Mutex::new(Vec::new())) };
+        0
+    })
+}
+
+/// Appends one RID to a staged RID list (repeatable; duplicates are kept).
+#[no_mangle]
+pub extern "C" fn nominal_rid_list_add(list: i32, rid: *const c_char) -> i32 {
+    guard(|| {
+        let list = lookup_handle!(RidListHandle, list);
+        let rid = match read_required_str(rid, "rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if rid.is_empty() {
+            return fail(NominalErrorCode::InvalidArgument, "rid must not be empty");
+        }
+        list.lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .push(rid);
+        0
+    })
+}
+
+/// Frees a RID-list staging handle. Freeing twice returns an error.
+#[no_mangle]
+pub extern "C" fn nominal_rid_list_free(list: i32) -> i32 {
+    guard(|| {
+        if RidListHandle::remove(list) {
+            0
+        } else {
+            fail(
+                NominalErrorCode::InvalidHandle,
+                format!("invalid rid list: {list}"),
+            )
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -213,6 +280,34 @@ mod tests {
         assert!(OtherHandle::get(a).is_none());
         assert!(!OtherHandle::remove(a), "cross-registry free must fail");
         assert!(OtherHandle::remove(b));
+    }
+
+    #[test]
+    fn rid_list_round_trip() {
+        let _guard = crate::error::test_message_lock();
+        let mut list = 0i32;
+        assert_eq!(nominal_rid_list_begin(&mut list), 0);
+
+        let rid = std::ffi::CString::new("ri.scout.x.asset.1").unwrap();
+        assert_eq!(nominal_rid_list_add(list, rid.as_ptr()), 0);
+        let empty = std::ffi::CString::new("").unwrap();
+        assert_eq!(
+            nominal_rid_list_add(list, empty.as_ptr()),
+            NominalErrorCode::InvalidArgument as i32
+        );
+
+        let staged = RidListHandle::get(list).unwrap();
+        assert_eq!(rid_list_snapshot(&staged), vec!["ri.scout.x.asset.1"]);
+
+        assert_eq!(nominal_rid_list_free(list), 0);
+        assert_eq!(
+            nominal_rid_list_free(list),
+            NominalErrorCode::InvalidHandle as i32
+        );
+        assert_eq!(
+            nominal_rid_list_add(list, rid.as_ptr()),
+            NominalErrorCode::InvalidHandle as i32
+        );
     }
 
     #[test]
