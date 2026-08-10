@@ -1,6 +1,9 @@
 ﻿<?xml version='1.0' encoding='UTF-8'?>
 <Project Type="Project" LVVersion="20008000">
+	<Property Name="NI.LV.All.SourceOnly" Type="Bool">true</Property>
+	<Property Name="NI.Project.Description" Type="Str"></Property>
 	<Item Name="My Computer" Type="My Computer">
+		<Property Name="NI.SortType" Type="Int">3</Property>
 		<Property Name="server.app.propertiesEnabled" Type="Bool">true</Property>
 		<Property Name="server.control.propertiesEnabled" Type="Bool">true</Property>
 		<Property Name="server.tcp.enabled" Type="Bool">false</Property>
@@ -10,21 +13,15 @@
 		<Property Name="server.vi.callsEnabled" Type="Bool">true</Property>
 		<Property Name="server.vi.propertiesEnabled" Type="Bool">true</Property>
 		<Property Name="specify.custom.address" Type="Bool">false</Property>
-		<Item Name="client" Type="Folder">
-			<Item Name="subvi" Type="Folder"/>
-			<Item Name="VIs" Type="Folder">
-				<Item Name="dir.mnu" Type="Document" URL="../client/VIs/dir.mnu"/>
-			</Item>
-			<Item Name="client.lvlib" Type="Library" URL="../client/client.lvlib"/>
-			<Item Name="dir.mnu" Type="Document" URL="../client/dir.mnu"/>
-			<Item Name="Report.html" Type="Document" URL="../client/Report.html"/>
-		</Item>
 		<Item Name="dev" Type="Folder">
 			<Item Name="scripting.vi" Type="VI" URL="../dev/scripting.vi"/>
 		</Item>
 		<Item Name="tests" Type="Folder">
-			<Item Name="initial tests.vi" Type="VI" URL="../tests/initial tests.vi"/>
+			<Item Name="1 - Offline client lifecycle.vi" Type="VI" URL="../tests/1 - Offline client lifecycle.vi"/>
+			<Item Name="2 - Real API list + loop.vi" Type="VI" URL="../tests/2 - Real API list + loop.vi"/>
+			<Item Name="3 - Staged create-verify-staged update-archive.vi" Type="VI" URL="../tests/3 - Staged create-verify-staged update-archive.vi"/>
 		</Item>
+		<Item Name="client.lvlib" Type="Library" URL="../client/client.lvlib"/>
 		<Item Name="Dependencies" Type="Dependencies">
 			<Item Name="vi.lib" Type="Folder">
 				<Item Name="BuildHelpPath.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/BuildHelpPath.vi"/>

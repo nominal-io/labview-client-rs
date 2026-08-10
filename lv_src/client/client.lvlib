@@ -3,6 +3,7 @@
 	<Property Name="NI.Lib.Icon" Type="Bin">)!#!!!!!!!)!"1!&amp;!!!-!%!!!@````]!!!!"!!%!!!+`!!!*Q(C=\:;`&lt;B."%)&gt;`)5B1ED&gt;!6LL1$1^!Y19+C]9&amp;,T#PY$;J(/70"'FA*%MUU,B*&gt;YU,3JKJX0M*E0)+RX@LD:V%W!%*"!7T._?\X_T-@.Z&lt;HSQ6?SQ^6(O@;:M&gt;%.`@&lt;!@T,N[U&lt;&gt;.QY.2LWOO,JJG5_&amp;*I6O=[Z7:]H&lt;]_&lt;]RP\O1PZZ?SK`[XYBONR!?4T4&lt;@`PU(*4\!7M9N+\?4&gt;BW`%\I:&lt;^NF@H&gt;5,U+\D+^O6_.W`$K`Z!\;[]E=[`Y`NMH]@`SPRQ_W\\_$_4&lt;\G:`XY&lt;W4`L"*/_J?2(DCA4NO[E*NIC&gt;[IC&gt;[IC&gt;[I!&gt;[I!&gt;[I!?[ITO[ITO[ITO[I2O[I2O[I2N['?B#&amp;\L17:7E?&gt;)I+:I53#;$IO35]#1]#5`#Q[U3HI1HY5FY%B[G+/&amp;*?"+?B#@B)5U*4]+4]#1]#1_F#EG7A1Z0QE.Z"4Q"4]!4]!1]N&amp;4!%Q!%T9,#12%Q&amp;!3$CY!HY!FYO&amp;4!%`!%0!&amp;0Q%.9!5`!%`!%0!%0+766IN"U!RU?SMDB=8A=(I@(Y;'U("[(R_&amp;R?"Q?WMHB=8A=#+?B5RQ%/5H/"/@'Y8&amp;Y_*$$Y`!Y0![0QU/I0#%P+^02&gt;!-&gt;(I0(Y$&amp;Y$"[$BR)S?!Q?A]@A-8AI+Y0(Y$&amp;Y$"[$BV9S?!Q?A]=!-:L38E9R)^'9:!A'$U@:,6;?5B13+U/KGV&gt;V5[JO.N6.J,IZ6"_[[M.5@5CKC[_[K+K,J&lt;I)KF^/&amp;6I62L7*;H)X56?=&amp;`A-H_,(_!A@YHW]B_^VK&lt;^ZYN86F2;,B7;TG;&lt;4K9[0DT5;D41=$N8P^^8L^&lt;3XN\@[/`'5M&lt;3&gt;[`@3)&gt;@Y\NHJZ[]8*]`(&lt;U_@D3^/^M&gt;HXT[.U2^^8-\:08KB]:'?D-^@@LB].XR^?@\GV@MO`KP?V@OS?C`^#_^'06"\YW]9;`1&gt;8S_CA1!!!!!</Property>
 	<Property Name="NI.Lib.SourceVersion" Type="Int">536903680</Property>
 	<Property Name="NI.Lib.Version" Type="Str">1.0.0.0</Property>
+	<Property Name="NI.LV.All.SourceOnly" Type="Bool">true</Property>
 	<Item Name="subvi" Type="Folder">
 		<Item Name="Error Converter (ErrCode or Status).vi" Type="VI" URL="../subvi/Error Converter (ErrCode or Status).vi"/>
 	</Item>
