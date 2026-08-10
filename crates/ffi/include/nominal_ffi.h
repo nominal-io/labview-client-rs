@@ -1343,6 +1343,19 @@ int32_t nominal_run_add_connection(int32_t client,
                                    int32_t *out_run);
 
 /*
+ Adds an already-uploaded attachment (by RID) to the run with `rid`. Call
+ repeatedly to add several — each call is one API request reaching the
+ same end state as an upstream batch.
+ */
+int32_t nominal_run_add_attachment(int32_t client, const char *rid, const char *attachment_rid);
+
+/*
+ Removes an attachment (by RID) from the run with `rid`. The attachment
+ itself is not deleted from Nominal. Call repeatedly to remove several.
+ */
+int32_t nominal_run_remove_attachment(int32_t client, const char *rid, const char *attachment_rid);
+
+/*
  Archives a run (hidden from the UI, not deleted).
  */
 int32_t nominal_run_archive(int32_t client, const char *rid);

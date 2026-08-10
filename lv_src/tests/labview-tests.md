@@ -20,6 +20,7 @@ run. Status as of 2026-08-08:
 | 13. MCAP ingest | mcap staging VIs, topic filters, non-tabular job flow | NOT YET RUN |
 | 14. Video ingest | video upload VI, f64 start time, video-RID job result | NOT YET RUN |
 | 15. Ingest into new dataset | csv new-dataset VI, create staging reuse, result RID = created dataset | NOT YET RUN |
+| 16. Run attachments | add/remove attachment VIs against a pre-uploaded attachment | NOT YET RUN |
 
 Re-run all three after any re-import, and after any DLL change that touches
 signatures.
@@ -535,3 +536,29 @@ one CSV pass covers the pattern.
    commits.
 8. Cleanup: free both staging handles, both job handles, dataset handles;
    archive both created datasets; `nominal client free.vi`.
+
+## Test 16 — Run attachments (NOT YET RUN)
+
+Attachment UPLOAD is not exposed by this FFI (only linking already-uploaded
+attachments to runs), so stage the attachment in the web app first: open any
+run in your workspace, attach a small file via the UI, then copy the
+attachment's RID (`ri.attachments...`) from the attachment's detail view.
+Both calls return no data — success is the 0 error code plus what the app
+shows.
+
+1. `nominal client new.vi` — real token.
+2. `nominal run create.vi` — name `labview-ffi-attachment-test`, start now
+   → run RID on a wire.
+3. `nominal run add attachment.vi` — client, run RID, the attachment RID →
+   error 0. In the app: the run's Attachments panel now lists the file.
+4. Call step 3 again with the same attachment RID — the API treats it as
+   idempotent (still error 0, no duplicate in the app). If it errors
+   instead, note the observed behavior here.
+5. `nominal run remove attachment.vi` — same args → error 0. In the app:
+   the attachments panel is empty again, but the file still exists in the
+   original run you copied it from (removal does not delete).
+6. Negative: `nominal run remove attachment.vi` with RID
+   `ri.attachments.x.attachment.00000000-0000-0000-0000-000000000000` →
+   non-zero error; `nominal last error.vi` names the failure.
+7. Cleanup: archive the test run, free the run handle,
+   `nominal client free.vi`.

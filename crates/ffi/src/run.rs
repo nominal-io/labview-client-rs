@@ -494,6 +494,59 @@ pub extern "C" fn nominal_run_add_connection(
     })
 }
 
+/// Adds an already-uploaded attachment (by RID) to the run with `rid`. Call
+/// repeatedly to add several — each call is one API request reaching the
+/// same end state as an upstream batch.
+#[no_mangle]
+pub extern "C" fn nominal_run_add_attachment(
+    client: i32,
+    rid: *const c_char,
+    attachment_rid: *const c_char,
+) -> i32 {
+    guard(|| {
+        let client = lookup_handle!(ClientHandle, client);
+        let rid = match read_required_str(rid, "rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        let attachment_rid = match read_required_str(attachment_rid, "attachment_rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+
+        match block_on(client.runs().add_attachments(&rid, [&attachment_rid])) {
+            Ok(()) => 0,
+            Err(err) => fail_sdk(err),
+        }
+    })
+}
+
+/// Removes an attachment (by RID) from the run with `rid`. The attachment
+/// itself is not deleted from Nominal. Call repeatedly to remove several.
+#[no_mangle]
+pub extern "C" fn nominal_run_remove_attachment(
+    client: i32,
+    rid: *const c_char,
+    attachment_rid: *const c_char,
+) -> i32 {
+    guard(|| {
+        let client = lookup_handle!(ClientHandle, client);
+        let rid = match read_required_str(rid, "rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        let attachment_rid = match read_required_str(attachment_rid, "attachment_rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+
+        match block_on(client.runs().remove_attachments(&rid, [&attachment_rid])) {
+            Ok(()) => 0,
+            Err(err) => fail_sdk(err),
+        }
+    })
+}
+
 /// Archives a run (hidden from the UI, not deleted).
 #[no_mangle]
 pub extern "C" fn nominal_run_archive(client: i32, rid: *const c_char) -> i32 {
