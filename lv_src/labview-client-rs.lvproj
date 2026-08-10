@@ -21,6 +21,7 @@
 			<Item Name="2 - Real API list + loop.vi" Type="VI" URL="../tests/2 - Real API list + loop.vi"/>
 			<Item Name="3 - Staged create-verify-staged update-archive.vi" Type="VI" URL="../tests/3 - Staged create-verify-staged update-archive.vi"/>
 			<Item Name="4 - Run lifecycle.vi" Type="VI" URL="../tests/4 - Run lifecycle.vi"/>
+			<Item Name="5 - Dataset Lifecycle.vi" Type="VI" URL="../tests/5 - Dataset Lifecycle.vi"/>
 		</Item>
 		<Item Name="client.lvlib" Type="Library" URL="../client/client.lvlib"/>
 		<Item Name="Dependencies" Type="Dependencies">

@@ -48,6 +48,38 @@
 	<Item Name="nominal client free.vi" Type="VI" URL="../VIs/nominal client free.vi"/>
 	<Item Name="nominal client new.vi" Type="VI" URL="../VIs/nominal client new.vi"/>
 	<Item Name="nominal client workspace rid.vi" Type="VI" URL="../VIs/nominal client workspace rid.vi"/>
+	<Item Name="nominal dataset archive.vi" Type="VI" URL="../VIs/nominal dataset archive.vi"/>
+	<Item Name="nominal dataset create add label.vi" Type="VI" URL="../VIs/nominal dataset create add label.vi"/>
+	<Item Name="nominal dataset create begin.vi" Type="VI" URL="../VIs/nominal dataset create begin.vi"/>
+	<Item Name="nominal dataset create commit.vi" Type="VI" URL="../VIs/nominal dataset create commit.vi"/>
+	<Item Name="nominal dataset create free.vi" Type="VI" URL="../VIs/nominal dataset create free.vi"/>
+	<Item Name="nominal dataset create set channel delimiter.vi" Type="VI" URL="../VIs/nominal dataset create set channel delimiter.vi"/>
+	<Item Name="nominal dataset create set description.vi" Type="VI" URL="../VIs/nominal dataset create set description.vi"/>
+	<Item Name="nominal dataset create set property.vi" Type="VI" URL="../VIs/nominal dataset create set property.vi"/>
+	<Item Name="nominal dataset create.vi" Type="VI" URL="../VIs/nominal dataset create.vi"/>
+	<Item Name="nominal dataset created at.vi" Type="VI" URL="../VIs/nominal dataset created at.vi"/>
+	<Item Name="nominal dataset description.vi" Type="VI" URL="../VIs/nominal dataset description.vi"/>
+	<Item Name="nominal dataset free.vi" Type="VI" URL="../VIs/nominal dataset free.vi"/>
+	<Item Name="nominal dataset get.vi" Type="VI" URL="../VIs/nominal dataset get.vi"/>
+	<Item Name="nominal dataset label at.vi" Type="VI" URL="../VIs/nominal dataset label at.vi"/>
+	<Item Name="nominal dataset label count.vi" Type="VI" URL="../VIs/nominal dataset label count.vi"/>
+	<Item Name="nominal dataset list.vi" Type="VI" URL="../VIs/nominal dataset list.vi"/>
+	<Item Name="nominal dataset name.vi" Type="VI" URL="../VIs/nominal dataset name.vi"/>
+	<Item Name="nominal dataset property count.vi" Type="VI" URL="../VIs/nominal dataset property count.vi"/>
+	<Item Name="nominal dataset property key at.vi" Type="VI" URL="../VIs/nominal dataset property key at.vi"/>
+	<Item Name="nominal dataset property value at.vi" Type="VI" URL="../VIs/nominal dataset property value at.vi"/>
+	<Item Name="nominal dataset rid.vi" Type="VI" URL="../VIs/nominal dataset rid.vi"/>
+	<Item Name="nominal dataset search.vi" Type="VI" URL="../VIs/nominal dataset search.vi"/>
+	<Item Name="nominal dataset unarchive.vi" Type="VI" URL="../VIs/nominal dataset unarchive.vi"/>
+	<Item Name="nominal dataset update add label.vi" Type="VI" URL="../VIs/nominal dataset update add label.vi"/>
+	<Item Name="nominal dataset update begin.vi" Type="VI" URL="../VIs/nominal dataset update begin.vi"/>
+	<Item Name="nominal dataset update commit.vi" Type="VI" URL="../VIs/nominal dataset update commit.vi"/>
+	<Item Name="nominal dataset update free.vi" Type="VI" URL="../VIs/nominal dataset update free.vi"/>
+	<Item Name="nominal dataset update set description.vi" Type="VI" URL="../VIs/nominal dataset update set description.vi"/>
+	<Item Name="nominal dataset update set name.vi" Type="VI" URL="../VIs/nominal dataset update set name.vi"/>
+	<Item Name="nominal dataset update set property.vi" Type="VI" URL="../VIs/nominal dataset update set property.vi"/>
+	<Item Name="nominal dataset update.vi" Type="VI" URL="../VIs/nominal dataset update.vi"/>
+	<Item Name="nominal dataset url.vi" Type="VI" URL="../VIs/nominal dataset url.vi"/>
 	<Item Name="nominal handle list count.vi" Type="VI" URL="../VIs/nominal handle list count.vi"/>
 	<Item Name="nominal handle list free.vi" Type="VI" URL="../VIs/nominal handle list free.vi"/>
 	<Item Name="nominal handle list get.vi" Type="VI" URL="../VIs/nominal handle list get.vi"/>
