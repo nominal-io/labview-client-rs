@@ -25,6 +25,7 @@
 			<Item Name="6 - Video Lifecycle.vi" Type="VI" URL="../tests/6 - Video Lifecycle.vi"/>
 			<Item Name="7 - Channel metadata.vi" Type="VI" URL="../tests/7 - Channel metadata.vi"/>
 			<Item Name="8 - CSV Ingest.vi" Type="VI" URL="../tests/8 - CSV Ingest.vi"/>
+			<Item Name="9 - Workbook from template.vi" Type="VI" URL="../tests/9 - Workbook from template.vi"/>
 		</Item>
 		<Item Name="client.lvlib" Type="Library" URL="../client/client.lvlib"/>
 		<Item Name="Dependencies" Type="Dependencies">
