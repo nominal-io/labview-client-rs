@@ -11,5 +11,6 @@ pub mod asset;
 pub mod client;
 pub mod error;
 pub mod handles;
+pub mod run;
 pub mod runtime;
 pub mod strings;

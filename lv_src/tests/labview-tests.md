@@ -1,13 +1,13 @@
 # LabVIEW manual test plan — nominal FFI
 
 Manual smoke tests for the wizard-imported VIs, in the order they should be
-run. Status as of 2026-08-07:
+run. Status as of 2026-08-08:
 
 | Test | What it proves | Status |
 |---|---|---|
 | 1. Offline client lifecycle | handle/error/string machinery, no network | PASSED 2026-08-07 |
 | 2. Real API list + loop | auth, search, handle lists, getters at scale | PASSED 2026-08-07 |
-| 3. Staged create/update | staging-handle VIs, labels/properties, archive | NOT YET RUN |
+| 3. Staged create/update | staging-handle VIs, labels/properties, archive | PASSED 2026-08-08 |
 
 Re-run all three after any re-import, and after any DLL change that touches
 signatures.

@@ -457,4 +457,328 @@ int32_t nominal_handle_list_get(int32_t list, int32_t index, int32_t *out_handle
  */
 int32_t nominal_handle_list_free(int32_t list);
 
+/*
+ Creates a run with a name, start time (`f64` Unix milliseconds), optional
+ description (null or empty = none), and optional end time (`has_end`
+ false = still running / no end). Writes the new run's handle to
+ `out_run`; free with `nominal_run_free`. For labels, properties, or asset
+ links use the `nominal_run_create_begin` staging flow instead.
+ */
+int32_t nominal_run_create(int32_t client,
+                           const char *name,
+                           const char *description,
+                           double start_ms,
+                           double end_ms,
+                           bool has_end,
+                           int32_t *out_run);
+
+/*
+ Fetches the run with the given RID, writing its handle to `out_run`.
+ Free with `nominal_run_free`.
+ */
+int32_t nominal_run_get(int32_t client, const char *rid, int32_t *out_run);
+
+/*
+ Lists all runs (newest first), returning a handle list.
+
+ On success `*out_list` is a handle list of `*out_count` run handles —
+ read them with `nominal_handle_list_get` and free the list with
+ `nominal_handle_list_free`. Each run handle stays valid until passed to
+ `nominal_run_free`, independent of the list.
+ */
+int32_t nominal_run_list(int32_t client, int32_t *out_list, uint32_t *out_count);
+
+/*
+ Searches runs, returning a handle list (see `nominal_run_list` for
+ ownership).
+
+ Filters are optional and combined with AND:
+ - `search_text`, `label`, `property_key` + `property_value`: as in
+   `nominal_asset_search` (null or empty = no filter)
+ - `run_number`: 0 = no filter (real run numbers start at 1)
+ - `start_after_ms` (with `has_start_after`): only runs starting at or
+   after this Unix-millisecond timestamp
+ - `end_before_ms` (with `has_end_before`): only runs ending at or before
+   this Unix-millisecond timestamp
+ */
+int32_t nominal_run_search(int32_t client,
+                           const char *search_text,
+                           const char *label,
+                           const char *property_key,
+                           const char *property_value,
+                           uint32_t run_number,
+                           double start_after_ms,
+                           bool has_start_after,
+                           double end_before_ms,
+                           bool has_end_before,
+                           int32_t *out_list,
+                           uint32_t *out_count);
+
+/*
+ Updates a run's name and/or description. Null or empty arguments leave
+ that field unchanged. Writes a handle to the updated run to `out_run`
+ (free with `nominal_run_free`). For labels, properties, or time changes
+ use the `nominal_run_update_begin` staging flow instead.
+ */
+int32_t nominal_run_update(int32_t client,
+                           const char *rid,
+                           const char *name,
+                           const char *description,
+                           int32_t *out_run);
+
+/*
+ Archives a run (hidden from the UI, not deleted).
+ */
+int32_t nominal_run_archive(int32_t client, const char *rid);
+
+/*
+ Unarchives a run, restoring its visibility in the UI.
+ */
+int32_t nominal_run_unarchive(int32_t client, const char *rid);
+
+/*
+ Frees a run handle. Freeing twice returns an error.
+ */
+int32_t nominal_run_free(int32_t run);
+
+/*
+ Starts staging a run-create request with the required name and start time
+ (`f64` Unix milliseconds). Add optional fields with the
+ `nominal_run_create_set_*` / `_add_*` calls, then fire it with
+ `nominal_run_create_commit`. Free with `nominal_run_create_free` (commit
+ does not free).
+ */
+int32_t nominal_run_create_begin(const char *name, double start_ms, int32_t *out_staging);
+
+/*
+ Sets the description on a staged run create (empty clears it).
+ */
+int32_t nominal_run_create_set_description(int32_t staging, const char *description);
+
+/*
+ Sets the end time (`f64` Unix milliseconds) on a staged run create.
+ */
+int32_t nominal_run_create_set_end(int32_t staging, double end_ms);
+
+/*
+ Adds one label to a staged run create.
+ */
+int32_t nominal_run_create_add_label(int32_t staging, const char *label);
+
+/*
+ Sets one property on a staged run create (same key overwrites).
+ */
+int32_t nominal_run_create_set_property(int32_t staging, const char *key, const char *value);
+
+/*
+ Links one asset (by RID) to a staged run create.
+ */
+int32_t nominal_run_create_add_asset(int32_t staging, const char *asset_rid);
+
+/*
+ Creates the staged run, writing the new run's handle to `out_run` (free
+ with `nominal_run_free`). The staging handle stays valid — free it with
+ `nominal_run_create_free`.
+ */
+int32_t nominal_run_create_commit(int32_t client, int32_t staging, int32_t *out_run);
+
+/*
+ Frees a run-create staging handle. Freeing twice returns an error.
+ */
+int32_t nominal_run_create_free(int32_t staging);
+
+/*
+ Starts staging a run update. Only fields set via the
+ `nominal_run_update_set_*` / `_add_*` calls are changed at commit; the
+ rest remain untouched. Free with `nominal_run_update_free`.
+ */
+int32_t nominal_run_update_begin(int32_t *out_staging);
+
+/*
+ Stages a new name.
+ */
+int32_t nominal_run_update_set_name(int32_t staging, const char *name);
+
+/*
+ Stages a new description (empty clears the description).
+ */
+int32_t nominal_run_update_set_description(int32_t staging, const char *description);
+
+/*
+ Stages a new start time (`f64` Unix milliseconds).
+ */
+int32_t nominal_run_update_set_start(int32_t staging, double start_ms);
+
+/*
+ Stages a new end time (`f64` Unix milliseconds).
+ */
+int32_t nominal_run_update_set_end(int32_t staging, double end_ms);
+
+/*
+ Adds one label to the staged update. NOTE: touching labels at all means
+ the commit REPLACES the run's entire label set with exactly the labels
+ accumulated here (upstream semantics) — to keep existing labels, add them
+ too.
+ */
+int32_t nominal_run_update_add_label(int32_t staging, const char *label);
+
+/*
+ Sets one property on the staged update (same key overwrites). NOTE: same
+ replace semantics as labels — touching properties at all means the commit
+ replaces the run's entire property map with the ones accumulated here.
+ */
+int32_t nominal_run_update_set_property(int32_t staging, const char *key, const char *value);
+
+/*
+ Applies the staged update to the run with the given RID, writing a handle
+ to the updated run to `out_run` (free with `nominal_run_free`). At least
+ one field must have been staged. The staging handle stays valid — free it
+ with `nominal_run_update_free`.
+ */
+int32_t nominal_run_update_commit(int32_t client,
+                                  const char *rid,
+                                  int32_t staging,
+                                  int32_t *out_run);
+
+/*
+ Frees a run-update staging handle. Freeing twice returns an error.
+ */
+int32_t nominal_run_update_free(int32_t staging);
+
+/*
+ Writes the run's RID into `buf`, storing the byte count needed in
+ `out_needed`.
+ */
+int32_t nominal_run_rid(int32_t run, char *buf, uint32_t cap, uint32_t *out_needed);
+
+/*
+ Writes the run's name into `buf`, storing the byte count needed in
+ `out_needed`.
+ */
+int32_t nominal_run_name(int32_t run, char *buf, uint32_t cap, uint32_t *out_needed);
+
+/*
+ Writes the run's description into `buf` (always present upstream — may be
+ empty), storing the byte count needed in `out_needed`.
+ */
+int32_t nominal_run_description(int32_t run, char *buf, uint32_t cap, uint32_t *out_needed);
+
+/*
+ Writes the URL for viewing this run in the Nominal web app into `buf`,
+ storing the byte count needed in `out_needed`.
+ */
+int32_t nominal_run_url(int32_t run, char *buf, uint32_t cap, uint32_t *out_needed);
+
+/*
+ Stores the run's number in `out_number`.
+ */
+int32_t nominal_run_number(int32_t run, uint32_t *out_number);
+
+/*
+ Writes the run's start time to `out_millis` as `f64` Unix milliseconds
+ (UTC).
+ */
+int32_t nominal_run_start(int32_t run, double *out_millis);
+
+/*
+ Writes the run's end time to `out_millis` (`f64` Unix milliseconds, UTC)
+ and whether one is set to `is_present` (an absent end — a still-running
+ run — reports 0).
+ */
+int32_t nominal_run_end(int32_t run, double *out_millis, bool *is_present);
+
+/*
+ Writes the run's creation time to `out_millis` as `f64` Unix milliseconds
+ (UTC).
+ */
+int32_t nominal_run_created_at(int32_t run, double *out_millis);
+
+/*
+ Stores the number of properties on the run in `out_count`.
+ */
+int32_t nominal_run_property_count(int32_t run, uint32_t *out_count);
+
+/*
+ Writes the key of the property at `index` (0-based, sorted-key order) into
+ `buf`, storing the byte count needed in `out_needed`.
+ */
+int32_t nominal_run_property_key_at(int32_t run,
+                                    int32_t index,
+                                    char *buf,
+                                    uint32_t cap,
+                                    uint32_t *out_needed);
+
+/*
+ Writes the value of the property at `index` (0-based, sorted-key order)
+ into `buf`, storing the byte count needed in `out_needed`.
+ */
+int32_t nominal_run_property_value_at(int32_t run,
+                                      int32_t index,
+                                      char *buf,
+                                      uint32_t cap,
+                                      uint32_t *out_needed);
+
+/*
+ Stores the number of labels on the run in `out_count`.
+ */
+int32_t nominal_run_label_count(int32_t run, uint32_t *out_count);
+
+/*
+ Writes the label at `index` (0-based) into `buf`, storing the byte count
+ needed in `out_needed`.
+ */
+int32_t nominal_run_label_at(int32_t run,
+                             int32_t index,
+                             char *buf,
+                             uint32_t cap,
+                             uint32_t *out_needed);
+
+/*
+ Stores the number of assets linked to the run in `out_count`.
+ */
+int32_t nominal_run_asset_count(int32_t run, uint32_t *out_count);
+
+/*
+ Writes the RID of the linked asset at `index` (0-based) into `buf`,
+ storing the byte count needed in `out_needed`. Fetch the full asset with
+ `nominal_asset_get`.
+ */
+int32_t nominal_run_asset_rid_at(int32_t run,
+                                 int32_t index,
+                                 char *buf,
+                                 uint32_t cap,
+                                 uint32_t *out_needed);
+
+/*
+ Stores the number of data sources attached to the run in `out_count`.
+ (Empty for multi-asset runs — data sources live on the assets there.)
+ */
+int32_t nominal_run_data_source_count(int32_t run, uint32_t *out_count);
+
+/*
+ Writes the ref name of the data source at `index` (0-based, sorted-name
+ order) into `buf`, storing the byte count needed in `out_needed`.
+ */
+int32_t nominal_run_data_source_name_at(int32_t run,
+                                        int32_t index,
+                                        char *buf,
+                                        uint32_t cap,
+                                        uint32_t *out_needed);
+
+/*
+ Writes the RID of the data source at `index` (0-based, sorted-name order)
+ into `buf`, storing the byte count needed in `out_needed`.
+ */
+int32_t nominal_run_data_source_rid_at(int32_t run,
+                                       int32_t index,
+                                       char *buf,
+                                       uint32_t cap,
+                                       uint32_t *out_needed);
+
+/*
+ Writes the kind of the data source at `index` (0-based, sorted-name order)
+ to `out_type` as a `NominalDataSourceType` value.
+ */
+int32_t nominal_run_data_source_type_at(int32_t run, int32_t index, int32_t *out_type);
+
 #endif  /* NOMINAL_FFI_H */
