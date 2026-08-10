@@ -9,7 +9,14 @@
 		<Item Name="Error Converter (ErrCode or Status).vi" Type="VI" URL="../subvi/Error Converter (ErrCode or Status).vi"/>
 		<Item Name="To Unix Milliseconds.vi" Type="VI" URL="../subvi/To Unix Milliseconds.vi"/>
 	</Item>
+	<Item Name="nominal asset add connection.vi" Type="VI" URL="../VIs/nominal asset add connection.vi"/>
+	<Item Name="nominal asset add dataset.vi" Type="VI" URL="../VIs/nominal asset add dataset.vi"/>
+	<Item Name="nominal asset add video.vi" Type="VI" URL="../VIs/nominal asset add video.vi"/>
 	<Item Name="nominal asset archive.vi" Type="VI" URL="../VIs/nominal asset archive.vi"/>
+	<Item Name="nominal asset attach dataset add tag.vi" Type="VI" URL="../VIs/nominal asset attach dataset add tag.vi"/>
+	<Item Name="nominal asset attach dataset begin.vi" Type="VI" URL="../VIs/nominal asset attach dataset begin.vi"/>
+	<Item Name="nominal asset attach dataset commit.vi" Type="VI" URL="../VIs/nominal asset attach dataset commit.vi"/>
+	<Item Name="nominal asset attach dataset free.vi" Type="VI" URL="../VIs/nominal asset attach dataset free.vi"/>
 	<Item Name="nominal asset create add label.vi" Type="VI" URL="../VIs/nominal asset create add label.vi"/>
 	<Item Name="nominal asset create begin.vi" Type="VI" URL="../VIs/nominal asset create begin.vi"/>
 	<Item Name="nominal asset create commit.vi" Type="VI" URL="../VIs/nominal asset create commit.vi"/>
@@ -93,13 +100,32 @@
 	<Item Name="nominal handle list count.vi" Type="VI" URL="../VIs/nominal handle list count.vi"/>
 	<Item Name="nominal handle list free.vi" Type="VI" URL="../VIs/nominal handle list free.vi"/>
 	<Item Name="nominal handle list get.vi" Type="VI" URL="../VIs/nominal handle list get.vi"/>
+	<Item Name="nominal ingest avro stream new dataset.vi" Type="VI" URL="../VIs/nominal ingest avro stream new dataset.vi"/>
+	<Item Name="nominal ingest avro stream.vi" Type="VI" URL="../VIs/nominal ingest avro stream.vi"/>
+	<Item Name="nominal ingest csv new dataset.vi" Type="VI" URL="../VIs/nominal ingest csv new dataset.vi"/>
 	<Item Name="nominal ingest csv.vi" Type="VI" URL="../VIs/nominal ingest csv.vi"/>
+	<Item Name="nominal ingest dataflash add file tag.vi" Type="VI" URL="../VIs/nominal ingest dataflash add file tag.vi"/>
+	<Item Name="nominal ingest dataflash begin.vi" Type="VI" URL="../VIs/nominal ingest dataflash begin.vi"/>
+	<Item Name="nominal ingest dataflash free.vi" Type="VI" URL="../VIs/nominal ingest dataflash free.vi"/>
+	<Item Name="nominal ingest dataflash new dataset.vi" Type="VI" URL="../VIs/nominal ingest dataflash new dataset.vi"/>
+	<Item Name="nominal ingest dataflash.vi" Type="VI" URL="../VIs/nominal ingest dataflash.vi"/>
 	<Item Name="nominal ingest job free.vi" Type="VI" URL="../VIs/nominal ingest job free.vi"/>
 	<Item Name="nominal ingest job get.vi" Type="VI" URL="../VIs/nominal ingest job get.vi"/>
 	<Item Name="nominal ingest job result rid.vi" Type="VI" URL="../VIs/nominal ingest job result rid.vi"/>
 	<Item Name="nominal ingest job rid.vi" Type="VI" URL="../VIs/nominal ingest job rid.vi"/>
 	<Item Name="nominal ingest job status.vi" Type="VI" URL="../VIs/nominal ingest job status.vi"/>
 	<Item Name="nominal ingest job wait.vi" Type="VI" URL="../VIs/nominal ingest job wait.vi"/>
+	<Item Name="nominal ingest journal json new dataset.vi" Type="VI" URL="../VIs/nominal ingest journal json new dataset.vi"/>
+	<Item Name="nominal ingest journal json.vi" Type="VI" URL="../VIs/nominal ingest journal json.vi"/>
+	<Item Name="nominal ingest mcap add file tag.vi" Type="VI" URL="../VIs/nominal ingest mcap add file tag.vi"/>
+	<Item Name="nominal ingest mcap begin.vi" Type="VI" URL="../VIs/nominal ingest mcap begin.vi"/>
+	<Item Name="nominal ingest mcap exclude topic.vi" Type="VI" URL="../VIs/nominal ingest mcap exclude topic.vi"/>
+	<Item Name="nominal ingest mcap free.vi" Type="VI" URL="../VIs/nominal ingest mcap free.vi"/>
+	<Item Name="nominal ingest mcap include topic.vi" Type="VI" URL="../VIs/nominal ingest mcap include topic.vi"/>
+	<Item Name="nominal ingest mcap new dataset.vi" Type="VI" URL="../VIs/nominal ingest mcap new dataset.vi"/>
+	<Item Name="nominal ingest mcap set ignore invalid topics.vi" Type="VI" URL="../VIs/nominal ingest mcap set ignore invalid topics.vi"/>
+	<Item Name="nominal ingest mcap.vi" Type="VI" URL="../VIs/nominal ingest mcap.vi"/>
+	<Item Name="nominal ingest parquet new dataset.vi" Type="VI" URL="../VIs/nominal ingest parquet new dataset.vi"/>
 	<Item Name="nominal ingest parquet.vi" Type="VI" URL="../VIs/nominal ingest parquet.vi"/>
 	<Item Name="nominal ingest tabular add file tag.vi" Type="VI" URL="../VIs/nominal ingest tabular add file tag.vi"/>
 	<Item Name="nominal ingest tabular add tag column.vi" Type="VI" URL="../VIs/nominal ingest tabular add tag column.vi"/>
@@ -112,7 +138,15 @@
 	<Item Name="nominal ingest tabular set timestamp epoch.vi" Type="VI" URL="../VIs/nominal ingest tabular set timestamp epoch.vi"/>
 	<Item Name="nominal ingest tabular set timestamp iso8601.vi" Type="VI" URL="../VIs/nominal ingest tabular set timestamp iso8601.vi"/>
 	<Item Name="nominal ingest tabular set timestamp relative.vi" Type="VI" URL="../VIs/nominal ingest tabular set timestamp relative.vi"/>
+	<Item Name="nominal ingest video mcap new.vi" Type="VI" URL="../VIs/nominal ingest video mcap new.vi"/>
+	<Item Name="nominal ingest video mcap.vi" Type="VI" URL="../VIs/nominal ingest video mcap.vi"/>
+	<Item Name="nominal ingest video new.vi" Type="VI" URL="../VIs/nominal ingest video new.vi"/>
+	<Item Name="nominal ingest video.vi" Type="VI" URL="../VIs/nominal ingest video.vi"/>
 	<Item Name="nominal last error.vi" Type="VI" URL="../VIs/nominal last error.vi"/>
+	<Item Name="nominal run add attachment.vi" Type="VI" URL="../VIs/nominal run add attachment.vi"/>
+	<Item Name="nominal run add connection.vi" Type="VI" URL="../VIs/nominal run add connection.vi"/>
+	<Item Name="nominal run add dataset.vi" Type="VI" URL="../VIs/nominal run add dataset.vi"/>
+	<Item Name="nominal run add video.vi" Type="VI" URL="../VIs/nominal run add video.vi"/>
 	<Item Name="nominal run archive.vi" Type="VI" URL="../VIs/nominal run archive.vi"/>
 	<Item Name="nominal run asset count.vi" Type="VI" URL="../VIs/nominal run asset count.vi"/>
 	<Item Name="nominal run asset rid at.vi" Type="VI" URL="../VIs/nominal run asset rid at.vi"/>
@@ -142,6 +176,7 @@
 	<Item Name="nominal run property count.vi" Type="VI" URL="../VIs/nominal run property count.vi"/>
 	<Item Name="nominal run property key at.vi" Type="VI" URL="../VIs/nominal run property key at.vi"/>
 	<Item Name="nominal run property value at.vi" Type="VI" URL="../VIs/nominal run property value at.vi"/>
+	<Item Name="nominal run remove attachment.vi" Type="VI" URL="../VIs/nominal run remove attachment.vi"/>
 	<Item Name="nominal run rid.vi" Type="VI" URL="../VIs/nominal run rid.vi"/>
 	<Item Name="nominal run search.vi" Type="VI" URL="../VIs/nominal run search.vi"/>
 	<Item Name="nominal run start.vi" Type="VI" URL="../VIs/nominal run start.vi"/>

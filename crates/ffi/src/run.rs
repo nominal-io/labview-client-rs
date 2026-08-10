@@ -360,6 +360,193 @@ pub extern "C" fn nominal_run_update(
     })
 }
 
+// ---------------------------------------------------------------------------
+// Data-source attach
+//
+// Each call attaches ONE data source under a ref name and returns the
+// updated run. Ref names should be stable across runs of the same type
+// (checklists and templates reference data sources by them). The server
+// rejects a ref name the run already has. To attach several sources, call
+// these repeatedly — the end state is identical to a batched attach.
+// ---------------------------------------------------------------------------
+
+/// Attaches the dataset with `dataset_rid` to the run with `rid` under
+/// `ref_name`, writing a handle to the updated run to `out_run` (free with
+/// `nominal_run_free`).
+#[no_mangle]
+pub extern "C" fn nominal_run_add_dataset(
+    client: i32,
+    rid: *const c_char,
+    ref_name: *const c_char,
+    dataset_rid: *const c_char,
+    out_run: *mut i32,
+) -> i32 {
+    guard(|| {
+        let client = lookup_handle!(ClientHandle, client);
+        let rid = match read_required_str(rid, "rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        let ref_name = match read_required_str(ref_name, "ref_name") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        let dataset_rid = match read_required_str(dataset_rid, "dataset_rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if out_run.is_null() {
+            return fail(NominalErrorCode::NullArgument, "out_run must not be null");
+        }
+
+        match block_on(client.runs().add_dataset(&rid, &ref_name, &dataset_rid)) {
+            Ok(run) => {
+                // SAFETY: out_run checked non-null above; caller owns it.
+                unsafe { *out_run = RunHandle::insert(run) };
+                0
+            }
+            Err(err) => fail_sdk(err),
+        }
+    })
+}
+
+/// Attaches the video with `video_rid` to the run with `rid` under
+/// `ref_name`, writing a handle to the updated run to `out_run` (free with
+/// `nominal_run_free`).
+#[no_mangle]
+pub extern "C" fn nominal_run_add_video(
+    client: i32,
+    rid: *const c_char,
+    ref_name: *const c_char,
+    video_rid: *const c_char,
+    out_run: *mut i32,
+) -> i32 {
+    guard(|| {
+        let client = lookup_handle!(ClientHandle, client);
+        let rid = match read_required_str(rid, "rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        let ref_name = match read_required_str(ref_name, "ref_name") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        let video_rid = match read_required_str(video_rid, "video_rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if out_run.is_null() {
+            return fail(NominalErrorCode::NullArgument, "out_run must not be null");
+        }
+
+        match block_on(client.runs().add_video(&rid, &ref_name, &video_rid)) {
+            Ok(run) => {
+                // SAFETY: out_run checked non-null above; caller owns it.
+                unsafe { *out_run = RunHandle::insert(run) };
+                0
+            }
+            Err(err) => fail_sdk(err),
+        }
+    })
+}
+
+/// Attaches the connection with `connection_rid` to the run with `rid` under
+/// `ref_name`, writing a handle to the updated run to `out_run` (free with
+/// `nominal_run_free`).
+#[no_mangle]
+pub extern "C" fn nominal_run_add_connection(
+    client: i32,
+    rid: *const c_char,
+    ref_name: *const c_char,
+    connection_rid: *const c_char,
+    out_run: *mut i32,
+) -> i32 {
+    guard(|| {
+        let client = lookup_handle!(ClientHandle, client);
+        let rid = match read_required_str(rid, "rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        let ref_name = match read_required_str(ref_name, "ref_name") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        let connection_rid = match read_required_str(connection_rid, "connection_rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if out_run.is_null() {
+            return fail(NominalErrorCode::NullArgument, "out_run must not be null");
+        }
+
+        match block_on(
+            client
+                .runs()
+                .add_connection(&rid, &ref_name, &connection_rid),
+        ) {
+            Ok(run) => {
+                // SAFETY: out_run checked non-null above; caller owns it.
+                unsafe { *out_run = RunHandle::insert(run) };
+                0
+            }
+            Err(err) => fail_sdk(err),
+        }
+    })
+}
+
+/// Adds an already-uploaded attachment (by RID) to the run with `rid`. Call
+/// repeatedly to add several — each call is one API request reaching the
+/// same end state as an upstream batch.
+#[no_mangle]
+pub extern "C" fn nominal_run_add_attachment(
+    client: i32,
+    rid: *const c_char,
+    attachment_rid: *const c_char,
+) -> i32 {
+    guard(|| {
+        let client = lookup_handle!(ClientHandle, client);
+        let rid = match read_required_str(rid, "rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        let attachment_rid = match read_required_str(attachment_rid, "attachment_rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+
+        match block_on(client.runs().add_attachments(&rid, [&attachment_rid])) {
+            Ok(()) => 0,
+            Err(err) => fail_sdk(err),
+        }
+    })
+}
+
+/// Removes an attachment (by RID) from the run with `rid`. The attachment
+/// itself is not deleted from Nominal. Call repeatedly to remove several.
+#[no_mangle]
+pub extern "C" fn nominal_run_remove_attachment(
+    client: i32,
+    rid: *const c_char,
+    attachment_rid: *const c_char,
+) -> i32 {
+    guard(|| {
+        let client = lookup_handle!(ClientHandle, client);
+        let rid = match read_required_str(rid, "rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        let attachment_rid = match read_required_str(attachment_rid, "attachment_rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+
+        match block_on(client.runs().remove_attachments(&rid, [&attachment_rid])) {
+            Ok(()) => 0,
+            Err(err) => fail_sdk(err),
+        }
+    })
+}
+
 /// Archives a run (hidden from the UI, not deleted).
 #[no_mangle]
 pub extern "C" fn nominal_run_archive(client: i32, rid: *const c_char) -> i32 {

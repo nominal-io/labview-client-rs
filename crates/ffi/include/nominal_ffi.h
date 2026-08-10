@@ -269,6 +269,74 @@ int32_t nominal_asset_update_commit(int32_t client,
 int32_t nominal_asset_update_free(int32_t staging);
 
 /*
+ Attaches the dataset with `dataset_rid` to the asset with `rid` under
+ `scope_name`, writing a handle to the updated asset to `out_asset` (free
+ with `nominal_asset_free`).
+ */
+int32_t nominal_asset_add_dataset(int32_t client,
+                                  const char *rid,
+                                  const char *scope_name,
+                                  const char *dataset_rid,
+                                  int32_t *out_asset);
+
+/*
+ Attaches the video with `video_rid` to the asset with `rid` under
+ `scope_name`, writing a handle to the updated asset to `out_asset` (free
+ with `nominal_asset_free`).
+ */
+int32_t nominal_asset_add_video(int32_t client,
+                                const char *rid,
+                                const char *scope_name,
+                                const char *video_rid,
+                                int32_t *out_asset);
+
+/*
+ Attaches the connection with `connection_rid` to the asset with `rid`
+ under `scope_name`, writing a handle to the updated asset to `out_asset`
+ (free with `nominal_asset_free`).
+ */
+int32_t nominal_asset_add_connection(int32_t client,
+                                     const char *rid,
+                                     const char *scope_name,
+                                     const char *connection_rid,
+                                     int32_t *out_asset);
+
+/*
+ Starts staging a dataset attach with series-tag filters (tags select which
+ series from the dataset are included in the asset's data scope). Add tags
+ with `nominal_asset_attach_dataset_add_tag`, then fire it with
+ `nominal_asset_attach_dataset_commit`. Free with
+ `nominal_asset_attach_dataset_free` (commit does not free). For an attach
+ without tags, the flat `nominal_asset_add_dataset` is simpler.
+ */
+int32_t nominal_asset_attach_dataset_begin(const char *scope_name,
+                                           const char *dataset_rid,
+                                           int32_t *out_staging);
+
+/*
+ Adds one series-tag filter to a staged dataset attach (same key
+ overwrites).
+ */
+int32_t nominal_asset_attach_dataset_add_tag(int32_t staging, const char *key, const char *value);
+
+/*
+ Attaches the staged dataset (with its accumulated series tags) to the
+ asset with `rid`, writing a handle to the updated asset to `out_asset`
+ (free with `nominal_asset_free`). The staging handle stays valid — free it
+ with `nominal_asset_attach_dataset_free`, or commit it again against
+ another asset.
+ */
+int32_t nominal_asset_attach_dataset_commit(int32_t client,
+                                            const char *rid,
+                                            int32_t staging,
+                                            int32_t *out_asset);
+
+/*
+ Frees a dataset-attach staging handle. Freeing twice returns an error.
+ */
+int32_t nominal_asset_attach_dataset_free(int32_t staging);
+
+/*
  Archives an asset (hidden from the UI, not deleted).
  */
 int32_t nominal_asset_archive(int32_t client, const char *rid);
@@ -902,6 +970,229 @@ int32_t nominal_ingest_parquet(int32_t client,
                                int32_t *out_job);
 
 /*
+ Starts staging options for an MCAP ingest. All options are optional — an
+ untouched staging handle ingests every topic. Fire it with
+ `nominal_ingest_mcap`; free with `nominal_ingest_mcap_free` (the ingest
+ call does not free, so one staging handle can serve several files).
+ */
+int32_t nominal_ingest_mcap_begin(int32_t *out_staging);
+
+/*
+ Ingests only the given topic (repeatable). Mutually exclusive with
+ `nominal_ingest_mcap_exclude_topic` — setting both fails at ingest time.
+ */
+int32_t nominal_ingest_mcap_include_topic(int32_t staging, const char *topic);
+
+/*
+ Skips the given topic during ingest (repeatable). Mutually exclusive with
+ `nominal_ingest_mcap_include_topic` — setting both fails at ingest time.
+ */
+int32_t nominal_ingest_mcap_exclude_topic(int32_t staging, const char *topic);
+
+/*
+ Applies a fixed tag value to every row in the file (repeatable).
+ */
+int32_t nominal_ingest_mcap_add_file_tag(int32_t staging, const char *tag, const char *value);
+
+/*
+ If true, invalid MCAP topics are skipped instead of failing the whole
+ ingest (defaults to the server-side default, false).
+ */
+int32_t nominal_ingest_mcap_set_ignore_invalid_topics(int32_t staging, bool ignore);
+
+/*
+ Frees an MCAP-ingest staging handle. Freeing twice returns an error.
+ */
+int32_t nominal_ingest_mcap_free(int32_t staging);
+
+/*
+ Uploads an MCAP file and ingests its protobuf timeseries data into the
+ existing dataset with the given RID, using the staged options. Blocks
+ until the upload completes and the server accepts the ingest. Writes a
+ job handle to `out_job` (see `nominal_ingest_csv` for the job-handle
+ contract). The staging handle stays valid for reuse.
+ */
+int32_t nominal_ingest_mcap(int32_t client,
+                            int32_t staging,
+                            const char *file_path,
+                            const char *dataset_rid,
+                            int32_t *out_job);
+
+/*
+ Starts staging options for an ArduPilot DataFlash (`.bin`) ingest. File
+ tags are the only option — an untouched staging handle is valid. Fire it
+ with `nominal_ingest_dataflash`; free with
+ `nominal_ingest_dataflash_free`.
+ */
+int32_t nominal_ingest_dataflash_begin(int32_t *out_staging);
+
+/*
+ Applies a fixed tag value to every row in the file (repeatable).
+ */
+int32_t nominal_ingest_dataflash_add_file_tag(int32_t staging, const char *tag, const char *value);
+
+/*
+ Frees a DataFlash-ingest staging handle. Freeing twice returns an error.
+ */
+int32_t nominal_ingest_dataflash_free(int32_t staging);
+
+/*
+ Uploads an ArduPilot DataFlash (`.bin`) file and ingests it into the
+ existing dataset with the given RID, using the staged file tags. Blocks
+ until the upload completes and the server accepts the ingest. Writes a
+ job handle to `out_job` (see `nominal_ingest_csv` for the job-handle
+ contract). The staging handle stays valid for reuse.
+ */
+int32_t nominal_ingest_dataflash(int32_t client,
+                                 int32_t staging,
+                                 const char *file_path,
+                                 const char *dataset_rid,
+                                 int32_t *out_job);
+
+/*
+ Uploads a journald JSON file (`.jsonl` / `.jsonl.gz`) and ingests it into
+ the existing dataset with the given RID. `channel` names the channel the
+ log lines land in (null or empty = the server default, `logs`). Blocks
+ until the upload completes and the server accepts the ingest. Writes a
+ job handle to `out_job` (see `nominal_ingest_csv` for the job-handle
+ contract).
+ */
+int32_t nominal_ingest_journal_json(int32_t client,
+                                    const char *file_path,
+                                    const char *dataset_rid,
+                                    const char *channel,
+                                    int32_t *out_job);
+
+/*
+ Uploads a Nominal Avro-stream (`.avro`) file and ingests it into the
+ existing dataset with the given RID. The Avro record schema is fixed
+ server-side; there are no options. Blocks until the upload completes and
+ the server accepts the ingest. Writes a job handle to `out_job` (see
+ `nominal_ingest_csv` for the job-handle contract).
+ */
+int32_t nominal_ingest_avro_stream(int32_t client,
+                                   const char *file_path,
+                                   const char *dataset_rid,
+                                   int32_t *out_job);
+
+/*
+ Uploads a standalone video file (`.mp4` / `.mkv` / `.avi` / `.ts`) whose
+ first frame is at `start_ms` (`f64` Unix milliseconds, UTC) and ingests
+ it into the EXISTING video resource with the given RID. Blocks until the
+ upload completes and the server accepts the ingest. Writes a job handle
+ to `out_job`; `nominal_ingest_job_result_rid` on it reports the video
+ RID. For a video stream inside an MCAP file use
+ `nominal_ingest_video_mcap` instead.
+ */
+int32_t nominal_ingest_video(int32_t client,
+                             const char *file_path,
+                             const char *video_rid,
+                             double start_ms,
+                             int32_t *out_job);
+
+/*
+ Uploads an MCAP file and extracts the single video stream on `topic`
+ into the EXISTING video resource with the given RID (per-frame timestamps
+ come from the MCAP log times). Blocks until the upload completes and the
+ server accepts the ingest. Writes a job handle to `out_job`;
+ `nominal_ingest_job_result_rid` on it reports the video RID.
+ */
+int32_t nominal_ingest_video_mcap(int32_t client,
+                                  const char *file_path,
+                                  const char *video_rid,
+                                  const char *topic,
+                                  int32_t *out_job);
+
+/*
+ Like `nominal_ingest_csv`, but ingests into a NEW dataset described by
+ `dataset_create` (a `nominal_dataset_create_begin` staging handle),
+ created atomically with the ingest.
+ */
+int32_t nominal_ingest_csv_new_dataset(int32_t client,
+                                       int32_t staging,
+                                       const char *file_path,
+                                       int32_t dataset_create,
+                                       int32_t *out_job);
+
+/*
+ Like `nominal_ingest_parquet`, but ingests into a NEW dataset described
+ by `dataset_create` (a `nominal_dataset_create_begin` staging handle),
+ created atomically with the ingest.
+ */
+int32_t nominal_ingest_parquet_new_dataset(int32_t client,
+                                           int32_t staging,
+                                           const char *file_path,
+                                           int32_t dataset_create,
+                                           int32_t *out_job);
+
+/*
+ Like `nominal_ingest_mcap`, but ingests into a NEW dataset described by
+ `dataset_create` (a `nominal_dataset_create_begin` staging handle),
+ created atomically with the ingest.
+ */
+int32_t nominal_ingest_mcap_new_dataset(int32_t client,
+                                        int32_t staging,
+                                        const char *file_path,
+                                        int32_t dataset_create,
+                                        int32_t *out_job);
+
+/*
+ Like `nominal_ingest_journal_json`, but ingests into a NEW dataset
+ described by `dataset_create` (a `nominal_dataset_create_begin` staging
+ handle), created atomically with the ingest.
+ */
+int32_t nominal_ingest_journal_json_new_dataset(int32_t client,
+                                                const char *file_path,
+                                                int32_t dataset_create,
+                                                const char *channel,
+                                                int32_t *out_job);
+
+/*
+ Like `nominal_ingest_avro_stream`, but ingests into a NEW dataset
+ described by `dataset_create` (a `nominal_dataset_create_begin` staging
+ handle), created atomically with the ingest.
+ */
+int32_t nominal_ingest_avro_stream_new_dataset(int32_t client,
+                                               const char *file_path,
+                                               int32_t dataset_create,
+                                               int32_t *out_job);
+
+/*
+ Like `nominal_ingest_dataflash`, but ingests into a NEW dataset described
+ by `dataset_create` (a `nominal_dataset_create_begin` staging handle),
+ created atomically with the ingest.
+ */
+int32_t nominal_ingest_dataflash_new_dataset(int32_t client,
+                                             int32_t staging,
+                                             const char *file_path,
+                                             int32_t dataset_create,
+                                             int32_t *out_job);
+
+/*
+ Like `nominal_ingest_video`, but ingests into a NEW video resource
+ described by `video_create` (a `nominal_video_create_begin` staging
+ handle), created atomically with the ingest. The created video's RID
+ comes back via `nominal_ingest_job_result_rid`.
+ */
+int32_t nominal_ingest_video_new(int32_t client,
+                                 const char *file_path,
+                                 int32_t video_create,
+                                 double start_ms,
+                                 int32_t *out_job);
+
+/*
+ Like `nominal_ingest_video_mcap`, but ingests into a NEW video resource
+ described by `video_create` (a `nominal_video_create_begin` staging
+ handle), created atomically with the ingest. The created video's RID
+ comes back via `nominal_ingest_job_result_rid`.
+ */
+int32_t nominal_ingest_video_mcap_new(int32_t client,
+                                      const char *file_path,
+                                      int32_t video_create,
+                                      const char *topic,
+                                      int32_t *out_job);
+
+/*
  Fetches the current state of the ingest job with the given RID, writing a
  job handle to `out_job` (free with `nominal_ingest_job_free`).
  */
@@ -1017,6 +1308,52 @@ int32_t nominal_run_update(int32_t client,
                            const char *name,
                            const char *description,
                            int32_t *out_run);
+
+/*
+ Attaches the dataset with `dataset_rid` to the run with `rid` under
+ `ref_name`, writing a handle to the updated run to `out_run` (free with
+ `nominal_run_free`).
+ */
+int32_t nominal_run_add_dataset(int32_t client,
+                                const char *rid,
+                                const char *ref_name,
+                                const char *dataset_rid,
+                                int32_t *out_run);
+
+/*
+ Attaches the video with `video_rid` to the run with `rid` under
+ `ref_name`, writing a handle to the updated run to `out_run` (free with
+ `nominal_run_free`).
+ */
+int32_t nominal_run_add_video(int32_t client,
+                              const char *rid,
+                              const char *ref_name,
+                              const char *video_rid,
+                              int32_t *out_run);
+
+/*
+ Attaches the connection with `connection_rid` to the run with `rid` under
+ `ref_name`, writing a handle to the updated run to `out_run` (free with
+ `nominal_run_free`).
+ */
+int32_t nominal_run_add_connection(int32_t client,
+                                   const char *rid,
+                                   const char *ref_name,
+                                   const char *connection_rid,
+                                   int32_t *out_run);
+
+/*
+ Adds an already-uploaded attachment (by RID) to the run with `rid`. Call
+ repeatedly to add several — each call is one API request reaching the
+ same end state as an upstream batch.
+ */
+int32_t nominal_run_add_attachment(int32_t client, const char *rid, const char *attachment_rid);
+
+/*
+ Removes an attachment (by RID) from the run with `rid`. The attachment
+ itself is not deleted from Nominal. Call repeatedly to remove several.
+ */
+int32_t nominal_run_remove_attachment(int32_t client, const char *rid, const char *attachment_rid);
 
 /*
  Archives a run (hidden from the UI, not deleted).

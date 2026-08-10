@@ -10,7 +10,10 @@ use wiremock::matchers::{body_partial_json, method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 use nominal_ffi::asset::{
-    nominal_asset_archive, nominal_asset_create, nominal_asset_create_add_label,
+    nominal_asset_add_connection, nominal_asset_add_dataset, nominal_asset_add_video,
+    nominal_asset_archive, nominal_asset_attach_dataset_add_tag,
+    nominal_asset_attach_dataset_begin, nominal_asset_attach_dataset_commit,
+    nominal_asset_attach_dataset_free, nominal_asset_create, nominal_asset_create_add_label,
     nominal_asset_create_begin, nominal_asset_create_commit, nominal_asset_create_free,
     nominal_asset_create_set_description, nominal_asset_create_set_property,
     nominal_asset_created_at, nominal_asset_data_source_count, nominal_asset_data_source_name_at,
@@ -32,6 +35,8 @@ const ASSET_RID: &str = "ri.scout.cerulean-staging.asset.00000000-0000-0000-0000
 const DATASET_RID: &str =
     "ri.catalog.cerulean-staging.dataset.00000000-0000-0000-0000-000000000002";
 const VIDEO_RID: &str = "ri.catalog.cerulean-staging.video.00000000-0000-0000-0000-000000000003";
+const CONNECTION_RID: &str =
+    "ri.datasource.cerulean-staging.connection.00000000-0000-0000-0000-000000000004";
 // 2024-01-15T10:30:00Z as Unix milliseconds (double — exact, well below 2^53).
 const CREATED_AT_MILLIS: f64 = 1_705_314_600_000.0;
 
@@ -774,6 +779,213 @@ fn staging_calls_reject_invalid_staging_handle() {
         nominal_asset_update_add_label(987_654_321, label.as_ptr()),
         NominalErrorCode::InvalidHandle as i32
     );
+}
+
+#[test]
+fn add_dataset_sends_data_scope() {
+    let server = start_server();
+    // The mock only matches when the request carries exactly the one data
+    // scope, dataset-typed, under the scope name — wrong shape, no match.
+    mount(
+        &server,
+        Mock::given(method("POST"))
+            .and(path(format!("/scout/v1/asset/{ASSET_RID}/data-sources")))
+            .and(body_partial_json(json!({
+                "dataScopes": [{
+                    "dataScopeName": "flight-data",
+                    "dataSource": {"type": "dataset", "dataset": DATASET_RID}
+                }]
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(full_asset_json())),
+    );
+    let client = new_client(&server);
+
+    let rid = cstr(ASSET_RID);
+    let scope_name = cstr("flight-data");
+    let dataset_rid = cstr(DATASET_RID);
+    let mut updated = 0i32;
+    let code = nominal_asset_add_dataset(
+        client,
+        rid.as_ptr(),
+        scope_name.as_ptr(),
+        dataset_rid.as_ptr(),
+        &mut updated,
+    );
+    assert_eq!(code, 0, "add_dataset failed: {}", last_error());
+
+    // The updated asset comes back with its data scopes readable.
+    assert_eq!(
+        read_count(|c| nominal_asset_data_source_count(updated, c)).unwrap(),
+        2
+    );
+
+    nominal_asset_free(updated);
+    nominal_client_free(client);
+}
+
+#[test]
+fn add_video_and_connection_send_typed_sources() {
+    let server = start_server();
+    mount(
+        &server,
+        Mock::given(method("POST"))
+            .and(path(format!("/scout/v1/asset/{ASSET_RID}/data-sources")))
+            .and(body_partial_json(json!({
+                "dataScopes": [{
+                    "dataScopeName": "cockpit-cam",
+                    "dataSource": {"type": "video", "video": VIDEO_RID}
+                }]
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(full_asset_json())),
+    );
+    mount(
+        &server,
+        Mock::given(method("POST"))
+            .and(path(format!("/scout/v1/asset/{ASSET_RID}/data-sources")))
+            .and(body_partial_json(json!({
+                "dataScopes": [{
+                    "dataScopeName": "telemetry",
+                    "dataSource": {"type": "connection", "connection": CONNECTION_RID}
+                }]
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(full_asset_json())),
+    );
+    let client = new_client(&server);
+    let rid = cstr(ASSET_RID);
+
+    let scope_name = cstr("cockpit-cam");
+    let video_rid = cstr(VIDEO_RID);
+    let mut updated = 0i32;
+    let code = nominal_asset_add_video(
+        client,
+        rid.as_ptr(),
+        scope_name.as_ptr(),
+        video_rid.as_ptr(),
+        &mut updated,
+    );
+    assert_eq!(code, 0, "add_video failed: {}", last_error());
+    nominal_asset_free(updated);
+
+    let scope_name = cstr("telemetry");
+    let connection_rid = cstr(CONNECTION_RID);
+    let code = nominal_asset_add_connection(
+        client,
+        rid.as_ptr(),
+        scope_name.as_ptr(),
+        connection_rid.as_ptr(),
+        &mut updated,
+    );
+    assert_eq!(code, 0, "add_connection failed: {}", last_error());
+    nominal_asset_free(updated);
+
+    nominal_client_free(client);
+}
+
+#[test]
+fn staged_attach_sends_series_tags() {
+    let server = start_server();
+    // Tags must arrive with the same-key overwrite applied: rocket-2, not
+    // rocket-1.
+    mount(
+        &server,
+        Mock::given(method("POST"))
+            .and(path(format!("/scout/v1/asset/{ASSET_RID}/data-sources")))
+            .and(body_partial_json(json!({
+                "dataScopes": [{
+                    "dataScopeName": "flight-data",
+                    "dataSource": {"type": "dataset", "dataset": DATASET_RID},
+                    "seriesTags": {"phase": "ascent", "vehicle": "rocket-2"}
+                }]
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(full_asset_json())),
+    );
+    let client = new_client(&server);
+
+    let scope_name = cstr("flight-data");
+    let dataset_rid = cstr(DATASET_RID);
+    let mut staging = 0i32;
+    assert_eq!(
+        nominal_asset_attach_dataset_begin(scope_name.as_ptr(), dataset_rid.as_ptr(), &mut staging),
+        0
+    );
+    for (key, value) in [
+        ("vehicle", "rocket-1"),
+        ("phase", "ascent"),
+        ("vehicle", "rocket-2"),
+    ] {
+        let (key, value) = (cstr(key), cstr(value));
+        assert_eq!(
+            nominal_asset_attach_dataset_add_tag(staging, key.as_ptr(), value.as_ptr()),
+            0
+        );
+    }
+
+    let rid = cstr(ASSET_RID);
+    let mut updated = 0i32;
+    let code = nominal_asset_attach_dataset_commit(client, rid.as_ptr(), staging, &mut updated);
+    assert_eq!(code, 0, "staged attach failed: {}", last_error());
+
+    assert_eq!(nominal_asset_attach_dataset_free(staging), 0);
+    assert_eq!(
+        nominal_asset_attach_dataset_free(staging),
+        NominalErrorCode::InvalidHandle as i32,
+        "double free of staging must fail"
+    );
+
+    nominal_asset_free(updated);
+    nominal_client_free(client);
+}
+
+#[test]
+fn attach_begin_rejects_empty_arguments() {
+    let _guard = common::message_lock();
+    let empty = cstr("");
+    let scope_name = cstr("flight-data");
+    let dataset_rid = cstr(DATASET_RID);
+    let mut staging = 0i32;
+    assert_eq!(
+        nominal_asset_attach_dataset_begin(empty.as_ptr(), dataset_rid.as_ptr(), &mut staging),
+        NominalErrorCode::InvalidArgument as i32
+    );
+    assert_eq!(
+        nominal_asset_attach_dataset_begin(scope_name.as_ptr(), empty.as_ptr(), &mut staging),
+        NominalErrorCode::InvalidArgument as i32
+    );
+}
+
+#[test]
+fn add_dataset_conflict_maps_to_api_error() {
+    let _guard = common::message_lock();
+    let server = start_server();
+    // The server rejects a scope name the asset already has.
+    mount(
+        &server,
+        Mock::given(method("POST"))
+            .and(path(format!("/scout/v1/asset/{ASSET_RID}/data-sources")))
+            .respond_with(ResponseTemplate::new(409).set_body_json(json!({
+                "errorCode": "CONFLICT",
+                "errorName": "Scout:DataScopeNameAlreadyExists",
+                "errorInstanceId": "00000000-0000-0000-0000-000000000000",
+                "parameters": {}
+            }))),
+    );
+    let client = new_client(&server);
+
+    let rid = cstr(ASSET_RID);
+    let scope_name = cstr("flight-data");
+    let dataset_rid = cstr(DATASET_RID);
+    let mut updated = 0i32;
+    let code = nominal_asset_add_dataset(
+        client,
+        rid.as_ptr(),
+        scope_name.as_ptr(),
+        dataset_rid.as_ptr(),
+        &mut updated,
+    );
+    assert_eq!(code, NominalErrorCode::ApiError as i32);
+    assert!(!last_error().is_empty());
+
+    nominal_client_free(client);
 }
 
 #[test]

@@ -347,6 +347,25 @@ pub(crate) struct VideoCreateParams {
     properties: HashMap<String, String>,
 }
 
+impl VideoCreateParams {
+    /// Builds the upstream request from the accumulated fields. Shared by
+    /// `nominal_video_create_commit` and the `nominal_ingest_video*_new`
+    /// functions (which create the video atomically with an ingest).
+    pub(crate) fn to_create(&self) -> VideoCreate {
+        let mut create = VideoCreate::new(self.name.clone());
+        if let Some(description) = &self.description {
+            create = create.description(description.clone());
+        }
+        if !self.labels.is_empty() {
+            create = create.labels(self.labels.clone());
+        }
+        if !self.properties.is_empty() {
+            create = create.properties(self.properties.clone());
+        }
+        create
+    }
+}
+
 handle_registry!(VideoCreateStagingHandle, Mutex<VideoCreateParams>);
 
 /// Starts staging a video-create request with the (required) name. Add
@@ -467,22 +486,10 @@ pub extern "C" fn nominal_video_create_commit(
             return fail(NominalErrorCode::NullArgument, "out_video must not be null");
         }
 
-        let create = {
-            let params = staging
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-            let mut create = VideoCreate::new(params.name.clone());
-            if let Some(description) = &params.description {
-                create = create.description(description.clone());
-            }
-            if !params.labels.is_empty() {
-                create = create.labels(params.labels.clone());
-            }
-            if !params.properties.is_empty() {
-                create = create.properties(params.properties.clone());
-            }
-            create
-        };
+        let create = staging
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .to_create();
 
         match block_on(client.catalog().create_video(create)) {
             Ok(video) => {

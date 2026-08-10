@@ -1,4 +1,4 @@
-﻿//! Tier 2 for runs: request-building + response-parsing + FFI conversion
+//! Tier 2 for runs: request-building + response-parsing + FFI conversion
 //! against a wiremock server speaking the Conjure wire format. Mirrors the
 //! asset suite; timestamp marshaling (f64 Unix ms <-> UtcTimestamp) is the
 //! run-specific ground covered here.
@@ -14,18 +14,20 @@ use nominal_ffi::client::{nominal_client_free, nominal_client_new};
 use nominal_ffi::error::NominalErrorCode;
 use nominal_ffi::handles::{nominal_handle_list_free, nominal_handle_list_get};
 use nominal_ffi::run::{
-    nominal_run_archive, nominal_run_asset_count, nominal_run_asset_rid_at, nominal_run_create,
-    nominal_run_create_add_asset, nominal_run_create_add_label, nominal_run_create_begin,
-    nominal_run_create_commit, nominal_run_create_free, nominal_run_create_set_description,
-    nominal_run_create_set_end, nominal_run_create_set_property, nominal_run_created_at,
-    nominal_run_data_source_count, nominal_run_data_source_name_at, nominal_run_data_source_rid_at,
+    nominal_run_add_attachment, nominal_run_add_connection, nominal_run_add_dataset,
+    nominal_run_add_video, nominal_run_archive, nominal_run_asset_count, nominal_run_asset_rid_at,
+    nominal_run_create, nominal_run_create_add_asset, nominal_run_create_add_label,
+    nominal_run_create_begin, nominal_run_create_commit, nominal_run_create_free,
+    nominal_run_create_set_description, nominal_run_create_set_end,
+    nominal_run_create_set_property, nominal_run_created_at, nominal_run_data_source_count,
+    nominal_run_data_source_name_at, nominal_run_data_source_rid_at,
     nominal_run_data_source_type_at, nominal_run_description, nominal_run_end, nominal_run_free,
     nominal_run_get, nominal_run_label_at, nominal_run_label_count, nominal_run_list,
     nominal_run_name, nominal_run_number, nominal_run_property_count, nominal_run_property_key_at,
-    nominal_run_property_value_at, nominal_run_rid, nominal_run_search, nominal_run_start,
-    nominal_run_unarchive, nominal_run_update, nominal_run_update_add_label,
-    nominal_run_update_begin, nominal_run_update_commit, nominal_run_update_free,
-    nominal_run_update_set_start, nominal_run_url,
+    nominal_run_property_value_at, nominal_run_remove_attachment, nominal_run_rid,
+    nominal_run_search, nominal_run_start, nominal_run_unarchive, nominal_run_update,
+    nominal_run_update_add_label, nominal_run_update_begin, nominal_run_update_commit,
+    nominal_run_update_free, nominal_run_update_set_start, nominal_run_url,
 };
 
 const RUN_RID: &str = "ri.scout.cerulean-staging.run.00000000-0000-0000-0000-000000000010";
@@ -531,6 +533,188 @@ fn archive_and_unarchive() {
         0,
         "unarchive failed: {}",
         last_error()
+    );
+
+    nominal_client_free(client);
+}
+
+#[test]
+fn add_dataset_sends_ref_name_map() {
+    let server = start_server();
+    // The request body is a map keyed by ref name — the mock only matches
+    // when the dataset arrives under "flight-data".
+    mount(
+        &server,
+        Mock::given(method("POST"))
+            .and(path(format!("/scout/v1/run/{RUN_RID}/data-sources")))
+            .and(body_partial_json(json!({
+                "flight-data": {
+                    "dataSource": {"type": "dataset", "dataset": DATASET_RID}
+                }
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(full_run_json())),
+    );
+    let client = new_client(&server);
+
+    let rid = cstr(RUN_RID);
+    let ref_name = cstr("flight-data");
+    let dataset_rid = cstr(DATASET_RID);
+    let mut updated = 0i32;
+    let code = nominal_run_add_dataset(
+        client,
+        rid.as_ptr(),
+        ref_name.as_ptr(),
+        dataset_rid.as_ptr(),
+        &mut updated,
+    );
+    assert_eq!(code, 0, "add_dataset failed: {}", last_error());
+
+    // The updated run comes back with its data sources readable.
+    assert_eq!(
+        read_count(|c| nominal_run_data_source_count(updated, c)).unwrap(),
+        1
+    );
+    let name = read_string(|b, c, n| nominal_run_data_source_name_at(updated, 0, b, c, n)).unwrap();
+    assert_eq!(name, "flight-data");
+
+    nominal_run_free(updated);
+    nominal_client_free(client);
+}
+
+#[test]
+fn add_video_and_connection_send_typed_sources() {
+    let video_rid_str = "ri.catalog.cerulean-staging.video.00000000-0000-0000-0000-000000000003";
+    let connection_rid_str =
+        "ri.datasource.cerulean-staging.connection.00000000-0000-0000-0000-000000000004";
+    let server = start_server();
+    mount(
+        &server,
+        Mock::given(method("POST"))
+            .and(path(format!("/scout/v1/run/{RUN_RID}/data-sources")))
+            .and(body_partial_json(json!({
+                "cockpit-cam": {"dataSource": {"type": "video", "video": video_rid_str}}
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(full_run_json())),
+    );
+    mount(
+        &server,
+        Mock::given(method("POST"))
+            .and(path(format!("/scout/v1/run/{RUN_RID}/data-sources")))
+            .and(body_partial_json(json!({
+                "telemetry": {"dataSource": {"type": "connection", "connection": connection_rid_str}}
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(full_run_json())),
+    );
+    let client = new_client(&server);
+    let rid = cstr(RUN_RID);
+
+    let ref_name = cstr("cockpit-cam");
+    let video_rid = cstr(video_rid_str);
+    let mut updated = 0i32;
+    let code = nominal_run_add_video(
+        client,
+        rid.as_ptr(),
+        ref_name.as_ptr(),
+        video_rid.as_ptr(),
+        &mut updated,
+    );
+    assert_eq!(code, 0, "add_video failed: {}", last_error());
+    nominal_run_free(updated);
+
+    let ref_name = cstr("telemetry");
+    let connection_rid = cstr(connection_rid_str);
+    let code = nominal_run_add_connection(
+        client,
+        rid.as_ptr(),
+        ref_name.as_ptr(),
+        connection_rid.as_ptr(),
+        &mut updated,
+    );
+    assert_eq!(code, 0, "add_connection failed: {}", last_error());
+    nominal_run_free(updated);
+
+    nominal_client_free(client);
+}
+
+#[test]
+fn add_dataset_invalid_rid_fails_before_any_request() {
+    let _guard = common::message_lock();
+    // No mocks mounted: a request would fail differently than InvalidArgument.
+    let server = start_server();
+    let client = new_client(&server);
+
+    let rid = cstr("not-a-rid");
+    let ref_name = cstr("flight-data");
+    let dataset_rid = cstr(DATASET_RID);
+    let mut updated = 0i32;
+    let code = nominal_run_add_dataset(
+        client,
+        rid.as_ptr(),
+        ref_name.as_ptr(),
+        dataset_rid.as_ptr(),
+        &mut updated,
+    );
+    assert_eq!(code, NominalErrorCode::InvalidArgument as i32);
+
+    nominal_client_free(client);
+}
+
+const ATTACHMENT_RID: &str =
+    "ri.attachments.cerulean-staging.attachment.00000000-0000-0000-0000-000000000077";
+
+#[test]
+fn add_and_remove_attachment_post_update_requests() {
+    let server = start_server();
+    // Add and remove hit the same endpoint; the body arrays tell them apart
+    // (the empty side is omitted from the wire entirely, so each matcher
+    // names only its populated array).
+    mount(
+        &server,
+        Mock::given(method("POST"))
+            .and(path(format!("/scout/v1/run/{RUN_RID}/attachments")))
+            .and(body_partial_json(
+                json!({"attachmentsToAdd": [ATTACHMENT_RID]}),
+            ))
+            .respond_with(ResponseTemplate::new(204)),
+    );
+    mount(
+        &server,
+        Mock::given(method("POST"))
+            .and(path(format!("/scout/v1/run/{RUN_RID}/attachments")))
+            .and(body_partial_json(
+                json!({"attachmentsToRemove": [ATTACHMENT_RID]}),
+            ))
+            .respond_with(ResponseTemplate::new(204)),
+    );
+    let client = new_client(&server);
+    let rid = cstr(RUN_RID);
+    let attachment = cstr(ATTACHMENT_RID);
+
+    let code = nominal_run_add_attachment(client, rid.as_ptr(), attachment.as_ptr());
+    assert_eq!(code, 0, "add_attachment failed: {}", last_error());
+
+    let code = nominal_run_remove_attachment(client, rid.as_ptr(), attachment.as_ptr());
+    assert_eq!(code, 0, "remove_attachment failed: {}", last_error());
+
+    nominal_client_free(client);
+}
+
+#[test]
+fn attachment_invalid_rid_fails_before_any_request() {
+    let _guard = common::message_lock();
+    // No mocks mounted: a request would fail differently than InvalidArgument.
+    let server = start_server();
+    let client = new_client(&server);
+
+    let rid = cstr(RUN_RID);
+    let attachment = cstr("not-a-rid");
+    assert_eq!(
+        nominal_run_add_attachment(client, rid.as_ptr(), attachment.as_ptr()),
+        NominalErrorCode::InvalidArgument as i32
+    );
+    assert_eq!(
+        nominal_run_remove_attachment(client, rid.as_ptr(), attachment.as_ptr()),
+        NominalErrorCode::InvalidArgument as i32
     );
 
     nominal_client_free(client);

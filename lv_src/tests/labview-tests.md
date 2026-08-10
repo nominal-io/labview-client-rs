@@ -16,6 +16,11 @@ run. Status as of 2026-08-08:
 | 9. Workbook from template | template get, workbook create/search/archive | PASSED 2026-08-08 |
 | 10. Who am I | user VIs, token identity probe | PASSED 2026-08-08 |
 | 11. Workspace discovery | workspace VIs, finding your workspace RID | PASSED 2026-08-08 |
+| 12. Data-source attach | asset/run attach VIs, series-tag staging, scope-name conflict | NOT YET RUN |
+| 13. MCAP ingest | mcap staging VIs, topic filters, non-tabular job flow | NOT YET RUN |
+| 14. Video ingest | video upload VI, f64 start time, video-RID job result | NOT YET RUN |
+| 15. Ingest into new dataset | csv new-dataset VI, create staging reuse, result RID = created dataset | NOT YET RUN |
+| 16. Run attachments | add/remove attachment VIs against a pre-uploaded attachment | NOT YET RUN |
 
 Re-run all three after any re-import, and after any DLL change that touches
 signatures.
@@ -390,3 +395,170 @@ inside LabVIEW instead of copying it out of the web app.
    equals what you passed.
 6. Cleanup: free the workspace handles inside the loop, the list, and the
    client.
+
+## Test 12 — Data-source attach (NOT YET RUN)
+
+Wires ingested data to runs and assets — the step that makes Test 8's dataset
+show up on an asset or run in the app. Creates a REAL asset, run, and empty
+dataset; the archive steps hide them. Needs a real token.
+
+Attaches are one-source-per-call. Scope names (assets) / ref names (runs)
+must be unique per asset/run — the server rejects a duplicate (proven in
+step 8). Repeated calls accumulate sources; the end state is the same as a
+batched attach.
+
+Setup:
+1. `nominal client new.vi` — real token.
+2. `nominal asset create.vi` — name `labview-ffi-attach-asset` → keep handle
+   + `asset rid` on a wire.
+3. `nominal dataset create.vi` — name `labview-ffi-attach-dataset` → keep
+   handle + `dataset rid` on a wire.
+4. `nominal run create.vi` — name `labview-ffi-attach-run`, start_ms NowMs,
+   has_end false → keep handle + `run rid` on a wire.
+
+Flat asset attach:
+5. `nominal asset add dataset.vi` — client, asset RID, scope_name
+   `flight-data`, dataset RID → NEW asset handle (the old one is a stale
+   snapshot). Verify on the new handle:
+   - `asset data source count` = 1
+   - `asset data source name at` 0 = `flight-data`
+   - `asset data source rid at` 0 = the dataset RID
+   - `asset data source type at` 0 = 0 (Dataset)
+
+Staged attach with series tags (tags filter which series from the dataset
+are included in the scope — there is no getter for them; verify visually in
+the app if desired):
+6. `nominal asset attach dataset begin.vi` — scope_name
+   `flight-data-tagged`, dataset RID → staging.
+7. `nominal asset attach dataset add tag.vi` — key `vehicle`, value
+   `test-rig`. Then `nominal asset attach dataset commit.vi` — client,
+   asset RID, staging → NEW asset handle; `asset data source count` = 2.
+   `nominal asset attach dataset free.vi` (commit does NOT free).
+
+Duplicate scope name is a server error, not a crash:
+8. Re-run step 5 exactly (same scope_name `flight-data`) → expect error 8
+   (ApiError) in the error cluster; Clear Errors → `nominal last error.vi`
+   → a conflict message naming the scope.
+
+Run attach:
+9. `nominal run add dataset.vi` — client, run RID, ref_name `flight-data`,
+   dataset RID → NEW run handle. Verify: `run data source count` = 1,
+   `run data source name at` 0 = `flight-data`, `run data source rid at` 0
+   = the dataset RID, `run data source type at` 0 = 0.
+   (`nominal asset add video.vi` / `add connection.vi` and the run
+   equivalents are the same shape — covered by the automated suite; spot
+   check them here only if you have a real video/connection RID handy.)
+
+Cleanup:
+10. `nominal run archive.vi`, `nominal asset archive.vi`,
+    `nominal dataset archive.vi` — client + each RID.
+11. Free every handle: both extra asset handles from steps 5/7, the run
+    handle from step 9, the originals from setup, then
+    `nominal client free.vi`.
+
+## Test 13 — MCAP ingest (NOT YET RUN)
+
+Same job flow as Test 8, new staging surface. Requires a real `.mcap` file
+containing protobuf timeseries topics (any small robotics log works — note
+one or two of its topic names before starting). journald JSON
+(`nominal ingest journal json.vi`), Avro-stream
+(`nominal ingest avro stream.vi`), and DataFlash
+(`nominal ingest dataflash begin/add file tag/free.vi` +
+`nominal ingest dataflash.vi`) reuse this exact job flow with smaller option
+surfaces — the automated suite covers their wire shapes; spot check them in
+LabVIEW only if you have real files of those formats handy.
+
+1. `nominal client new.vi` — real token.
+2. `nominal dataset create.vi` — name `labview-ffi-mcap-test` → RID on a
+   wire.
+3. `nominal ingest mcap begin.vi` → staging.
+4. `nominal ingest mcap include topic.vi` — one real topic name from your
+   file. (Include and exclude are mutually exclusive — staging both makes
+   the ingest call return error 5 before uploading anything.)
+5. Optional: `nominal ingest mcap add file tag.vi` — tag `source`, value
+   `labview`; `nominal ingest mcap set ignore invalid topics.vi` — true.
+6. `nominal ingest mcap.vi` — client, staging, the MCAP path, the dataset
+   RID → job handle. Blocks for the upload (MCAPs are bigger than test
+   CSVs — expect seconds to minutes).
+7. `nominal ingest job wait.vi` — job RID, poll_interval_ms 0 → status 3
+   (Completed). MCAP processing takes longer server-side than CSV.
+8. Verify: `nominal channel list.vi` with the dataset RID → channels from
+   the included topic only (the filter is the point of this test).
+9. Cleanup: free job handles + staging (`nominal ingest mcap free.vi`),
+   dataset handle; `nominal client free.vi`.
+
+## Test 14 — Video ingest (NOT YET RUN)
+
+The video upload lands in a VIDEO resource, not a dataset — the payoff is a
+playable clip in the app. Any short `.mp4` on disk works.
+
+1. `nominal client new.vi` — real token.
+2. `nominal video create.vi` — name `labview-ffi-video-ingest` → video RID
+   on a wire (keep the handle).
+3. `nominal ingest video.vi` — client, the mp4 path, the video RID,
+   start_ms = NowMs (or any recent timestamp — it anchors the first frame
+   on the timeline) → job handle. Blocks for the upload.
+4. On the job handle: `ingest job result rid` — is_present true, equals the
+   video RID (video jobs report the VIDEO rid here, not a dataset).
+5. `nominal ingest job wait.vi` — poll to status 3 (Completed).
+6. Payoff: `nominal video url.vi` on a fresh `nominal video get.vi` handle
+   → open in the browser → the clip plays, positioned at start_ms.
+7. (`nominal ingest video mcap.vi` is the same shape with a topic string
+   instead of start_ms — needs an MCAP with a video stream; skip unless you
+   have one.)
+8. Cleanup: free job + both video handles; archive the video only after
+   you've looked at it. `nominal client free.vi`.
+
+## Test 15 — Ingest into a NEW dataset (NOT YET RUN)
+
+Exercises the atomic create-with-ingest path: no `nominal dataset create
+commit.vi` call anywhere — the dataset-create staging handle rides into the
+ingest call and the server creates the dataset only if the ingest is
+accepted. Uses the same CSV as Test 8. The `_new_dataset` variants of the
+other formats and the `_new` video variants share this exact plumbing; this
+one CSV pass covers the pattern.
+
+1. `nominal client new.vi` — real token.
+2. `nominal ingest tabular begin.vi` + a timestamp spec (epoch-seconds on
+   `time`, as in Test 8) → ingest staging.
+3. `nominal dataset create begin.vi` — name `labview-ffi-new-ds-test` →
+   create staging. Add a label (`from-labview`) and a property
+   (`origin` = `test-15`).
+4. `nominal ingest csv new dataset.vi` — client, ingest staging, the CSV
+   path, the CREATE staging handle (not a RID) → job handle.
+5. `ingest job result rid` — is_present true; this is the RID of the
+   dataset that did not exist a second ago. `nominal dataset get.vi` on it →
+   name is `labview-ffi-new-ds-test`, label and property present.
+6. `nominal ingest job wait.vi` → status 3; `nominal channel list.vi` on the
+   new RID → `temp` channel exists.
+7. Reuse check: call step 4 again with the same two staging handles → a
+   SECOND dataset appears (same name, new RID) — both stagings survive
+   commits.
+8. Cleanup: free both staging handles, both job handles, dataset handles;
+   archive both created datasets; `nominal client free.vi`.
+
+## Test 16 — Run attachments (NOT YET RUN)
+
+Attachment UPLOAD is not exposed by this FFI (only linking already-uploaded
+attachments to runs), so stage the attachment in the web app first: open any
+run in your workspace, attach a small file via the UI, then copy the
+attachment's RID (`ri.attachments...`) from the attachment's detail view.
+Both calls return no data — success is the 0 error code plus what the app
+shows.
+
+1. `nominal client new.vi` — real token.
+2. `nominal run create.vi` — name `labview-ffi-attachment-test`, start now
+   → run RID on a wire.
+3. `nominal run add attachment.vi` — client, run RID, the attachment RID →
+   error 0. In the app: the run's Attachments panel now lists the file.
+4. Call step 3 again with the same attachment RID — the API treats it as
+   idempotent (still error 0, no duplicate in the app). If it errors
+   instead, note the observed behavior here.
+5. `nominal run remove attachment.vi` — same args → error 0. In the app:
+   the attachments panel is empty again, but the file still exists in the
+   original run you copied it from (removal does not delete).
+6. Negative: `nominal run remove attachment.vi` with RID
+   `ri.attachments.x.attachment.00000000-0000-0000-0000-000000000000` →
+   non-zero error; `nominal last error.vi` names the failure.
+7. Cleanup: archive the test run, free the run handle,
+   `nominal client free.vi`.

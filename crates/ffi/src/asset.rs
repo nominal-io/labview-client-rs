@@ -658,6 +658,302 @@ pub extern "C" fn nominal_asset_update_free(staging: i32) -> i32 {
     })
 }
 
+// ---------------------------------------------------------------------------
+// Data-source attach
+//
+// Each call attaches ONE data source under a scope name and returns the
+// updated asset. Scope names should be stable across assets of the same type
+// (checklists and templates reference data sources by them). The server
+// rejects a scope name the asset already has. To attach several sources,
+// call these repeatedly — the end state is identical to a batched attach.
+// For a dataset with series-tag filters, use the
+// `nominal_asset_attach_dataset_begin` staging flow instead.
+// ---------------------------------------------------------------------------
+
+/// Attaches the dataset with `dataset_rid` to the asset with `rid` under
+/// `scope_name`, writing a handle to the updated asset to `out_asset` (free
+/// with `nominal_asset_free`).
+#[no_mangle]
+pub extern "C" fn nominal_asset_add_dataset(
+    client: i32,
+    rid: *const c_char,
+    scope_name: *const c_char,
+    dataset_rid: *const c_char,
+    out_asset: *mut i32,
+) -> i32 {
+    guard(|| {
+        let client = lookup_handle!(ClientHandle, client);
+        let rid = match read_required_str(rid, "rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        let scope_name = match read_required_str(scope_name, "scope_name") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        let dataset_rid = match read_required_str(dataset_rid, "dataset_rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if out_asset.is_null() {
+            return fail(NominalErrorCode::NullArgument, "out_asset must not be null");
+        }
+
+        match block_on(client.assets().add_dataset(&rid, &scope_name, &dataset_rid)) {
+            Ok(asset) => {
+                // SAFETY: out_asset checked non-null above; caller owns it.
+                unsafe { *out_asset = AssetHandle::insert(asset) };
+                0
+            }
+            Err(err) => fail_sdk(err),
+        }
+    })
+}
+
+/// Attaches the video with `video_rid` to the asset with `rid` under
+/// `scope_name`, writing a handle to the updated asset to `out_asset` (free
+/// with `nominal_asset_free`).
+#[no_mangle]
+pub extern "C" fn nominal_asset_add_video(
+    client: i32,
+    rid: *const c_char,
+    scope_name: *const c_char,
+    video_rid: *const c_char,
+    out_asset: *mut i32,
+) -> i32 {
+    guard(|| {
+        let client = lookup_handle!(ClientHandle, client);
+        let rid = match read_required_str(rid, "rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        let scope_name = match read_required_str(scope_name, "scope_name") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        let video_rid = match read_required_str(video_rid, "video_rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if out_asset.is_null() {
+            return fail(NominalErrorCode::NullArgument, "out_asset must not be null");
+        }
+
+        match block_on(client.assets().add_video(&rid, &scope_name, &video_rid)) {
+            Ok(asset) => {
+                // SAFETY: out_asset checked non-null above; caller owns it.
+                unsafe { *out_asset = AssetHandle::insert(asset) };
+                0
+            }
+            Err(err) => fail_sdk(err),
+        }
+    })
+}
+
+/// Attaches the connection with `connection_rid` to the asset with `rid`
+/// under `scope_name`, writing a handle to the updated asset to `out_asset`
+/// (free with `nominal_asset_free`).
+#[no_mangle]
+pub extern "C" fn nominal_asset_add_connection(
+    client: i32,
+    rid: *const c_char,
+    scope_name: *const c_char,
+    connection_rid: *const c_char,
+    out_asset: *mut i32,
+) -> i32 {
+    guard(|| {
+        let client = lookup_handle!(ClientHandle, client);
+        let rid = match read_required_str(rid, "rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        let scope_name = match read_required_str(scope_name, "scope_name") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        let connection_rid = match read_required_str(connection_rid, "connection_rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if out_asset.is_null() {
+            return fail(NominalErrorCode::NullArgument, "out_asset must not be null");
+        }
+
+        match block_on(
+            client
+                .assets()
+                .add_connection(&rid, &scope_name, &connection_rid),
+        ) {
+            Ok(asset) => {
+                // SAFETY: out_asset checked non-null above; caller owns it.
+                unsafe { *out_asset = AssetHandle::insert(asset) };
+                0
+            }
+            Err(err) => fail_sdk(err),
+        }
+    })
+}
+
+/// Accumulated fields for a dataset attach with series-tag filters (plain
+/// FFI-side struct — the upstream call is made only at commit).
+pub(crate) struct AssetAttachDatasetParams {
+    scope_name: String,
+    dataset_rid: String,
+    tags: HashMap<String, String>,
+}
+
+handle_registry!(
+    AssetAttachDatasetStagingHandle,
+    Mutex<AssetAttachDatasetParams>
+);
+
+/// Starts staging a dataset attach with series-tag filters (tags select which
+/// series from the dataset are included in the asset's data scope). Add tags
+/// with `nominal_asset_attach_dataset_add_tag`, then fire it with
+/// `nominal_asset_attach_dataset_commit`. Free with
+/// `nominal_asset_attach_dataset_free` (commit does not free). For an attach
+/// without tags, the flat `nominal_asset_add_dataset` is simpler.
+#[no_mangle]
+pub extern "C" fn nominal_asset_attach_dataset_begin(
+    scope_name: *const c_char,
+    dataset_rid: *const c_char,
+    out_staging: *mut i32,
+) -> i32 {
+    guard(|| {
+        let scope_name = match read_required_str(scope_name, "scope_name") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if scope_name.is_empty() {
+            return fail(
+                NominalErrorCode::InvalidArgument,
+                "scope_name must not be empty",
+            );
+        }
+        let dataset_rid = match read_required_str(dataset_rid, "dataset_rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if dataset_rid.is_empty() {
+            return fail(
+                NominalErrorCode::InvalidArgument,
+                "dataset_rid must not be empty",
+            );
+        }
+        if out_staging.is_null() {
+            return fail(
+                NominalErrorCode::NullArgument,
+                "out_staging must not be null",
+            );
+        }
+        let params = AssetAttachDatasetParams {
+            scope_name,
+            dataset_rid,
+            tags: HashMap::new(),
+        };
+        // SAFETY: out_staging checked non-null above; caller owns it.
+        unsafe { *out_staging = AssetAttachDatasetStagingHandle::insert(Mutex::new(params)) };
+        0
+    })
+}
+
+/// Adds one series-tag filter to a staged dataset attach (same key
+/// overwrites).
+#[no_mangle]
+pub extern "C" fn nominal_asset_attach_dataset_add_tag(
+    staging: i32,
+    key: *const c_char,
+    value: *const c_char,
+) -> i32 {
+    guard(|| {
+        let staging = lookup_handle!(AssetAttachDatasetStagingHandle, staging);
+        let key = match read_required_str(key, "key") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if key.is_empty() {
+            return fail(NominalErrorCode::InvalidArgument, "key must not be empty");
+        }
+        let value = match read_required_str(value, "value") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        staging
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .tags
+            .insert(key, value);
+        0
+    })
+}
+
+/// Attaches the staged dataset (with its accumulated series tags) to the
+/// asset with `rid`, writing a handle to the updated asset to `out_asset`
+/// (free with `nominal_asset_free`). The staging handle stays valid — free it
+/// with `nominal_asset_attach_dataset_free`, or commit it again against
+/// another asset.
+#[no_mangle]
+pub extern "C" fn nominal_asset_attach_dataset_commit(
+    client: i32,
+    rid: *const c_char,
+    staging: i32,
+    out_asset: *mut i32,
+) -> i32 {
+    guard(|| {
+        let client = lookup_handle!(ClientHandle, client);
+        let staging = lookup_handle!(AssetAttachDatasetStagingHandle, staging);
+        let rid = match read_required_str(rid, "rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if out_asset.is_null() {
+            return fail(NominalErrorCode::NullArgument, "out_asset must not be null");
+        }
+
+        let (scope_name, dataset_rid, tags) = {
+            let params = staging
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let mut tags: Vec<(String, String)> = params
+                .tags
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
+            // Sorted for a deterministic request body (HashMap order isn't).
+            tags.sort();
+            (params.scope_name.clone(), params.dataset_rid.clone(), tags)
+        };
+
+        match block_on(
+            client
+                .assets()
+                .add_dataset_with_tags(&rid, &scope_name, &dataset_rid, tags),
+        ) {
+            Ok(asset) => {
+                // SAFETY: out_asset checked non-null above; caller owns it.
+                unsafe { *out_asset = AssetHandle::insert(asset) };
+                0
+            }
+            Err(err) => fail_sdk(err),
+        }
+    })
+}
+
+/// Frees a dataset-attach staging handle. Freeing twice returns an error.
+#[no_mangle]
+pub extern "C" fn nominal_asset_attach_dataset_free(staging: i32) -> i32 {
+    guard(|| {
+        if AssetAttachDatasetStagingHandle::remove(staging) {
+            0
+        } else {
+            fail(
+                NominalErrorCode::InvalidHandle,
+                format!("invalid dataset-attach staging handle: {staging}"),
+            )
+        }
+    })
+}
+
 /// Archives an asset (hidden from the UI, not deleted).
 #[no_mangle]
 pub extern "C" fn nominal_asset_archive(client: i32, rid: *const c_char) -> i32 {
