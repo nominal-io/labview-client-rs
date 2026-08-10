@@ -16,6 +16,7 @@ run. Status as of 2026-08-08:
 | 9. Workbook from template | template get, workbook create/search/archive | PASSED 2026-08-08 |
 | 10. Who am I | user VIs, token identity probe | PASSED 2026-08-08 |
 | 11. Workspace discovery | workspace VIs, finding your workspace RID | PASSED 2026-08-08 |
+| 12. Data-source attach | asset/run attach VIs, series-tag staging, scope-name conflict | NOT YET RUN |
 
 Re-run all three after any re-import, and after any DLL change that touches
 signatures.
@@ -390,3 +391,63 @@ inside LabVIEW instead of copying it out of the web app.
    equals what you passed.
 6. Cleanup: free the workspace handles inside the loop, the list, and the
    client.
+
+## Test 12 — Data-source attach (NOT YET RUN)
+
+Wires ingested data to runs and assets — the step that makes Test 8's dataset
+show up on an asset or run in the app. Creates a REAL asset, run, and empty
+dataset; the archive steps hide them. Needs a real token.
+
+Attaches are one-source-per-call. Scope names (assets) / ref names (runs)
+must be unique per asset/run — the server rejects a duplicate (proven in
+step 8). Repeated calls accumulate sources; the end state is the same as a
+batched attach.
+
+Setup:
+1. `nominal client new.vi` — real token.
+2. `nominal asset create.vi` — name `labview-ffi-attach-asset` → keep handle
+   + `asset rid` on a wire.
+3. `nominal dataset create.vi` — name `labview-ffi-attach-dataset` → keep
+   handle + `dataset rid` on a wire.
+4. `nominal run create.vi` — name `labview-ffi-attach-run`, start_ms NowMs,
+   has_end false → keep handle + `run rid` on a wire.
+
+Flat asset attach:
+5. `nominal asset add dataset.vi` — client, asset RID, scope_name
+   `flight-data`, dataset RID → NEW asset handle (the old one is a stale
+   snapshot). Verify on the new handle:
+   - `asset data source count` = 1
+   - `asset data source name at` 0 = `flight-data`
+   - `asset data source rid at` 0 = the dataset RID
+   - `asset data source type at` 0 = 0 (Dataset)
+
+Staged attach with series tags (tags filter which series from the dataset
+are included in the scope — there is no getter for them; verify visually in
+the app if desired):
+6. `nominal asset attach dataset begin.vi` — scope_name
+   `flight-data-tagged`, dataset RID → staging.
+7. `nominal asset attach dataset add tag.vi` — key `vehicle`, value
+   `test-rig`. Then `nominal asset attach dataset commit.vi` — client,
+   asset RID, staging → NEW asset handle; `asset data source count` = 2.
+   `nominal asset attach dataset free.vi` (commit does NOT free).
+
+Duplicate scope name is a server error, not a crash:
+8. Re-run step 5 exactly (same scope_name `flight-data`) → expect error 8
+   (ApiError) in the error cluster; Clear Errors → `nominal last error.vi`
+   → a conflict message naming the scope.
+
+Run attach:
+9. `nominal run add dataset.vi` — client, run RID, ref_name `flight-data`,
+   dataset RID → NEW run handle. Verify: `run data source count` = 1,
+   `run data source name at` 0 = `flight-data`, `run data source rid at` 0
+   = the dataset RID, `run data source type at` 0 = 0.
+   (`nominal asset add video.vi` / `add connection.vi` and the run
+   equivalents are the same shape — covered by the automated suite; spot
+   check them here only if you have a real video/connection RID handy.)
+
+Cleanup:
+10. `nominal run archive.vi`, `nominal asset archive.vi`,
+    `nominal dataset archive.vi` — client + each RID.
+11. Free every handle: both extra asset handles from steps 5/7, the run
+    handle from step 9, the originals from setup, then
+    `nominal client free.vi`.

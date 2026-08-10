@@ -269,6 +269,74 @@ int32_t nominal_asset_update_commit(int32_t client,
 int32_t nominal_asset_update_free(int32_t staging);
 
 /*
+ Attaches the dataset with `dataset_rid` to the asset with `rid` under
+ `scope_name`, writing a handle to the updated asset to `out_asset` (free
+ with `nominal_asset_free`).
+ */
+int32_t nominal_asset_add_dataset(int32_t client,
+                                  const char *rid,
+                                  const char *scope_name,
+                                  const char *dataset_rid,
+                                  int32_t *out_asset);
+
+/*
+ Attaches the video with `video_rid` to the asset with `rid` under
+ `scope_name`, writing a handle to the updated asset to `out_asset` (free
+ with `nominal_asset_free`).
+ */
+int32_t nominal_asset_add_video(int32_t client,
+                                const char *rid,
+                                const char *scope_name,
+                                const char *video_rid,
+                                int32_t *out_asset);
+
+/*
+ Attaches the connection with `connection_rid` to the asset with `rid`
+ under `scope_name`, writing a handle to the updated asset to `out_asset`
+ (free with `nominal_asset_free`).
+ */
+int32_t nominal_asset_add_connection(int32_t client,
+                                     const char *rid,
+                                     const char *scope_name,
+                                     const char *connection_rid,
+                                     int32_t *out_asset);
+
+/*
+ Starts staging a dataset attach with series-tag filters (tags select which
+ series from the dataset are included in the asset's data scope). Add tags
+ with `nominal_asset_attach_dataset_add_tag`, then fire it with
+ `nominal_asset_attach_dataset_commit`. Free with
+ `nominal_asset_attach_dataset_free` (commit does not free). For an attach
+ without tags, the flat `nominal_asset_add_dataset` is simpler.
+ */
+int32_t nominal_asset_attach_dataset_begin(const char *scope_name,
+                                           const char *dataset_rid,
+                                           int32_t *out_staging);
+
+/*
+ Adds one series-tag filter to a staged dataset attach (same key
+ overwrites).
+ */
+int32_t nominal_asset_attach_dataset_add_tag(int32_t staging, const char *key, const char *value);
+
+/*
+ Attaches the staged dataset (with its accumulated series tags) to the
+ asset with `rid`, writing a handle to the updated asset to `out_asset`
+ (free with `nominal_asset_free`). The staging handle stays valid — free it
+ with `nominal_asset_attach_dataset_free`, or commit it again against
+ another asset.
+ */
+int32_t nominal_asset_attach_dataset_commit(int32_t client,
+                                            const char *rid,
+                                            int32_t staging,
+                                            int32_t *out_asset);
+
+/*
+ Frees a dataset-attach staging handle. Freeing twice returns an error.
+ */
+int32_t nominal_asset_attach_dataset_free(int32_t staging);
+
+/*
  Archives an asset (hidden from the UI, not deleted).
  */
 int32_t nominal_asset_archive(int32_t client, const char *rid);
@@ -1017,6 +1085,39 @@ int32_t nominal_run_update(int32_t client,
                            const char *name,
                            const char *description,
                            int32_t *out_run);
+
+/*
+ Attaches the dataset with `dataset_rid` to the run with `rid` under
+ `ref_name`, writing a handle to the updated run to `out_run` (free with
+ `nominal_run_free`).
+ */
+int32_t nominal_run_add_dataset(int32_t client,
+                                const char *rid,
+                                const char *ref_name,
+                                const char *dataset_rid,
+                                int32_t *out_run);
+
+/*
+ Attaches the video with `video_rid` to the run with `rid` under
+ `ref_name`, writing a handle to the updated run to `out_run` (free with
+ `nominal_run_free`).
+ */
+int32_t nominal_run_add_video(int32_t client,
+                              const char *rid,
+                              const char *ref_name,
+                              const char *video_rid,
+                              int32_t *out_run);
+
+/*
+ Attaches the connection with `connection_rid` to the run with `rid` under
+ `ref_name`, writing a handle to the updated run to `out_run` (free with
+ `nominal_run_free`).
+ */
+int32_t nominal_run_add_connection(int32_t client,
+                                   const char *rid,
+                                   const char *ref_name,
+                                   const char *connection_rid,
+                                   int32_t *out_run);
 
 /*
  Archives a run (hidden from the UI, not deleted).
