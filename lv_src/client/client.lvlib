@@ -128,5 +128,36 @@
 	<Item Name="nominal run update set start.vi" Type="VI" URL="../VIs/nominal run update set start.vi"/>
 	<Item Name="nominal run update.vi" Type="VI" URL="../VIs/nominal run update.vi"/>
 	<Item Name="nominal run url.vi" Type="VI" URL="../VIs/nominal run url.vi"/>
+	<Item Name="nominal video archive.vi" Type="VI" URL="../VIs/nominal video archive.vi"/>
+	<Item Name="nominal video create add label.vi" Type="VI" URL="../VIs/nominal video create add label.vi"/>
+	<Item Name="nominal video create begin.vi" Type="VI" URL="../VIs/nominal video create begin.vi"/>
+	<Item Name="nominal video create commit.vi" Type="VI" URL="../VIs/nominal video create commit.vi"/>
+	<Item Name="nominal video create free.vi" Type="VI" URL="../VIs/nominal video create free.vi"/>
+	<Item Name="nominal video create set description.vi" Type="VI" URL="../VIs/nominal video create set description.vi"/>
+	<Item Name="nominal video create set property.vi" Type="VI" URL="../VIs/nominal video create set property.vi"/>
+	<Item Name="nominal video create.vi" Type="VI" URL="../VIs/nominal video create.vi"/>
+	<Item Name="nominal video created at.vi" Type="VI" URL="../VIs/nominal video created at.vi"/>
+	<Item Name="nominal video description.vi" Type="VI" URL="../VIs/nominal video description.vi"/>
+	<Item Name="nominal video free.vi" Type="VI" URL="../VIs/nominal video free.vi"/>
+	<Item Name="nominal video get.vi" Type="VI" URL="../VIs/nominal video get.vi"/>
+	<Item Name="nominal video label at.vi" Type="VI" URL="../VIs/nominal video label at.vi"/>
+	<Item Name="nominal video label count.vi" Type="VI" URL="../VIs/nominal video label count.vi"/>
+	<Item Name="nominal video list.vi" Type="VI" URL="../VIs/nominal video list.vi"/>
+	<Item Name="nominal video name.vi" Type="VI" URL="../VIs/nominal video name.vi"/>
+	<Item Name="nominal video property count.vi" Type="VI" URL="../VIs/nominal video property count.vi"/>
+	<Item Name="nominal video property key at.vi" Type="VI" URL="../VIs/nominal video property key at.vi"/>
+	<Item Name="nominal video property value at.vi" Type="VI" URL="../VIs/nominal video property value at.vi"/>
+	<Item Name="nominal video rid.vi" Type="VI" URL="../VIs/nominal video rid.vi"/>
+	<Item Name="nominal video search.vi" Type="VI" URL="../VIs/nominal video search.vi"/>
+	<Item Name="nominal video unarchive.vi" Type="VI" URL="../VIs/nominal video unarchive.vi"/>
+	<Item Name="nominal video update add label.vi" Type="VI" URL="../VIs/nominal video update add label.vi"/>
+	<Item Name="nominal video update begin.vi" Type="VI" URL="../VIs/nominal video update begin.vi"/>
+	<Item Name="nominal video update commit.vi" Type="VI" URL="../VIs/nominal video update commit.vi"/>
+	<Item Name="nominal video update free.vi" Type="VI" URL="../VIs/nominal video update free.vi"/>
+	<Item Name="nominal video update set description.vi" Type="VI" URL="../VIs/nominal video update set description.vi"/>
+	<Item Name="nominal video update set name.vi" Type="VI" URL="../VIs/nominal video update set name.vi"/>
+	<Item Name="nominal video update set property.vi" Type="VI" URL="../VIs/nominal video update set property.vi"/>
+	<Item Name="nominal video update.vi" Type="VI" URL="../VIs/nominal video update.vi"/>
+	<Item Name="nominal video url.vi" Type="VI" URL="../VIs/nominal video url.vi"/>
 	<Item Name="nominalClient_64.dll" Type="Document" URL="../nominalClient_64.dll"/>
 </Library>
