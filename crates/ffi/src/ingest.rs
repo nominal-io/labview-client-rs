@@ -35,10 +35,12 @@ use nominal::core::{
 };
 
 use crate::client::ClientHandle;
+use crate::dataset::DatasetCreateStagingHandle;
 use crate::error::{fail, fail_sdk, guard, NominalErrorCode};
 use crate::handles::{handle_registry, lookup_handle};
 use crate::runtime::block_on;
 use crate::strings::{read_optional_str, read_required_str, write_opt_str_field, write_str_field};
+use crate::video::VideoCreateStagingHandle;
 
 /// The lifecycle status of an ingest job, as reported by
 /// `nominal_ingest_job_status`. Completed/Failed/Cancelled/Unknown are
@@ -471,6 +473,76 @@ fn staged_parts(
     ))
 }
 
+/// Builds the upstream `CsvIngest` from staged params (a timestamp spec is
+/// required; `is_archive` is rejected — that's Parquet-only).
+fn build_csv_ingest(staging: &Mutex<TabularIngestParams>) -> Result<CsvIngest, i32> {
+    let (timestamp, prefix, tag_columns, file_tags, exclude_columns, is_archive) =
+        staged_parts(staging)?;
+    if is_archive.is_some() {
+        return Err(fail(
+            NominalErrorCode::InvalidArgument,
+            "is_archive applies to parquet only — use nominal_ingest_parquet",
+        ));
+    }
+    let mut ingest = CsvIngest::new(timestamp);
+    if let Some(prefix) = prefix {
+        ingest = ingest.channel_prefix(prefix);
+    }
+    for (tag, column) in tag_columns {
+        ingest = ingest.tag_column(tag, column);
+    }
+    for (tag, value) in file_tags {
+        ingest = ingest.additional_file_tag(tag, value);
+    }
+    for column in exclude_columns {
+        ingest = ingest.exclude_column(column);
+    }
+    Ok(ingest)
+}
+
+/// Builds the upstream `ParquetIngest` from staged params (a timestamp spec
+/// is required).
+fn build_parquet_ingest(staging: &Mutex<TabularIngestParams>) -> Result<ParquetIngest, i32> {
+    let (timestamp, prefix, tag_columns, file_tags, exclude_columns, is_archive) =
+        staged_parts(staging)?;
+    let mut ingest = ParquetIngest::new(timestamp);
+    if let Some(prefix) = prefix {
+        ingest = ingest.channel_prefix(prefix);
+    }
+    for (tag, column) in tag_columns {
+        ingest = ingest.tag_column(tag, column);
+    }
+    for (tag, value) in file_tags {
+        ingest = ingest.additional_file_tag(tag, value);
+    }
+    for column in exclude_columns {
+        ingest = ingest.exclude_column(column);
+    }
+    if let Some(is_archive) = is_archive {
+        ingest = ingest.is_archive(is_archive);
+    }
+    Ok(ingest)
+}
+
+/// Shared tail of every upload function: wrap the upstream (job, result-RID)
+/// pair in a job handle, or map the error.
+///
+/// SAFETY contract: callers must have checked `out_job` non-null already.
+fn finish_upload(result: nominal::Result<(IngestJob, String)>, out_job: *mut i32) -> i32 {
+    match result {
+        Ok((job, rid)) => {
+            let handle = IngestJobHandle::insert(FfiIngestJob {
+                job,
+                result_rid: Some(rid),
+            });
+            // SAFETY: out_job checked non-null by the caller (see contract).
+            unsafe { *out_job = handle };
+            0
+        }
+        Err(err) => fail_sdk(err),
+    }
+}
+
 /// Uploads a CSV file (`.csv` / `.csv.gz`) and ingests it into the existing
 /// dataset with the given RID, using the staged options (a timestamp spec is
 /// required). Blocks until the upload completes and the server accepts the
@@ -500,49 +572,19 @@ pub extern "C" fn nominal_ingest_csv(
         if out_job.is_null() {
             return fail(NominalErrorCode::NullArgument, "out_job must not be null");
         }
+        let ingest = match build_csv_ingest(&staging) {
+            Ok(ingest) => ingest,
+            Err(code) => return code,
+        };
 
-        let (timestamp, prefix, tag_columns, file_tags, exclude_columns, is_archive) =
-            match staged_parts(&staging) {
-                Ok(parts) => parts,
-                Err(code) => return code,
-            };
-        if is_archive.is_some() {
-            return fail(
-                NominalErrorCode::InvalidArgument,
-                "is_archive applies to parquet only — use nominal_ingest_parquet",
-            );
-        }
-
-        let mut ingest = CsvIngest::new(timestamp);
-        if let Some(prefix) = prefix {
-            ingest = ingest.channel_prefix(prefix);
-        }
-        for (tag, column) in tag_columns {
-            ingest = ingest.tag_column(tag, column);
-        }
-        for (tag, value) in file_tags {
-            ingest = ingest.additional_file_tag(tag, value);
-        }
-        for column in exclude_columns {
-            ingest = ingest.exclude_column(column);
-        }
-
-        match block_on(
-            client
-                .ingest()
-                .upload_csv(&file_path, dataset_rid.as_str(), ingest),
-        ) {
-            Ok((job, rid)) => {
-                let handle = IngestJobHandle::insert(FfiIngestJob {
-                    job,
-                    result_rid: Some(rid),
-                });
-                // SAFETY: out_job checked non-null above; caller owns it.
-                unsafe { *out_job = handle };
-                0
-            }
-            Err(err) => fail_sdk(err),
-        }
+        finish_upload(
+            block_on(
+                client
+                    .ingest()
+                    .upload_csv(&file_path, dataset_rid.as_str(), ingest),
+            ),
+            out_job,
+        )
     })
 }
 
@@ -572,45 +614,19 @@ pub extern "C" fn nominal_ingest_parquet(
             return fail(NominalErrorCode::NullArgument, "out_job must not be null");
         }
 
-        let (timestamp, prefix, tag_columns, file_tags, exclude_columns, is_archive) =
-            match staged_parts(&staging) {
-                Ok(parts) => parts,
-                Err(code) => return code,
-            };
+        let ingest = match build_parquet_ingest(&staging) {
+            Ok(ingest) => ingest,
+            Err(code) => return code,
+        };
 
-        let mut ingest = ParquetIngest::new(timestamp);
-        if let Some(prefix) = prefix {
-            ingest = ingest.channel_prefix(prefix);
-        }
-        for (tag, column) in tag_columns {
-            ingest = ingest.tag_column(tag, column);
-        }
-        for (tag, value) in file_tags {
-            ingest = ingest.additional_file_tag(tag, value);
-        }
-        for column in exclude_columns {
-            ingest = ingest.exclude_column(column);
-        }
-        if let Some(is_archive) = is_archive {
-            ingest = ingest.is_archive(is_archive);
-        }
-
-        match block_on(
-            client
-                .ingest()
-                .upload_parquet(&file_path, dataset_rid.as_str(), ingest),
-        ) {
-            Ok((job, rid)) => {
-                let handle = IngestJobHandle::insert(FfiIngestJob {
-                    job,
-                    result_rid: Some(rid),
-                });
-                // SAFETY: out_job checked non-null above; caller owns it.
-                unsafe { *out_job = handle };
-                0
-            }
-            Err(err) => fail_sdk(err),
-        }
+        finish_upload(
+            block_on(
+                client
+                    .ingest()
+                    .upload_parquet(&file_path, dataset_rid.as_str(), ingest),
+            ),
+            out_job,
+        )
     })
 }
 
@@ -755,6 +771,43 @@ pub extern "C" fn nominal_ingest_mcap_free(staging: i32) -> i32 {
     })
 }
 
+/// Builds the upstream `McapIngest` from staged params, rejecting the
+/// include+exclude combination. Upstream rejects it too, but only after the
+/// file has already been uploaded — catching it here saves the wasted upload.
+fn build_mcap_ingest(staging: &Mutex<McapIngestParams>) -> Result<McapIngest, i32> {
+    let (include_topics, exclude_topics, file_tags, ignore_invalid) = {
+        let params = staging
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        (
+            params.include_topics.clone(),
+            params.exclude_topics.clone(),
+            params.file_tags.clone(),
+            params.ignore_invalid_topics,
+        )
+    };
+    if !include_topics.is_empty() && !exclude_topics.is_empty() {
+        return Err(fail(
+            NominalErrorCode::InvalidArgument,
+            "include_topic and exclude_topic are mutually exclusive",
+        ));
+    }
+    let mut ingest = McapIngest::new();
+    for topic in include_topics {
+        ingest = ingest.include_topic(topic);
+    }
+    for topic in exclude_topics {
+        ingest = ingest.exclude_topic(topic);
+    }
+    for (tag, value) in file_tags {
+        ingest = ingest.additional_file_tag(tag, value);
+    }
+    if let Some(ignore) = ignore_invalid {
+        ingest = ingest.ignore_invalid_topics(ignore);
+    }
+    Ok(ingest)
+}
+
 /// Uploads an MCAP file and ingests its protobuf timeseries data into the
 /// existing dataset with the given RID, using the staged options. Blocks
 /// until the upload completes and the server accepts the ingest. Writes a
@@ -782,57 +835,19 @@ pub extern "C" fn nominal_ingest_mcap(
         if out_job.is_null() {
             return fail(NominalErrorCode::NullArgument, "out_job must not be null");
         }
-
-        let (include_topics, exclude_topics, file_tags, ignore_invalid) = {
-            let params = staging
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-            (
-                params.include_topics.clone(),
-                params.exclude_topics.clone(),
-                params.file_tags.clone(),
-                params.ignore_invalid_topics,
-            )
+        let ingest = match build_mcap_ingest(&staging) {
+            Ok(ingest) => ingest,
+            Err(code) => return code,
         };
-        // Upstream rejects this combination too, but only after the file has
-        // already been uploaded — catching it here saves the wasted upload.
-        if !include_topics.is_empty() && !exclude_topics.is_empty() {
-            return fail(
-                NominalErrorCode::InvalidArgument,
-                "include_topic and exclude_topic are mutually exclusive",
-            );
-        }
 
-        let mut ingest = McapIngest::new();
-        for topic in include_topics {
-            ingest = ingest.include_topic(topic);
-        }
-        for topic in exclude_topics {
-            ingest = ingest.exclude_topic(topic);
-        }
-        for (tag, value) in file_tags {
-            ingest = ingest.additional_file_tag(tag, value);
-        }
-        if let Some(ignore) = ignore_invalid {
-            ingest = ingest.ignore_invalid_topics(ignore);
-        }
-
-        match block_on(
-            client
-                .ingest()
-                .upload_mcap(&file_path, dataset_rid.as_str(), ingest),
-        ) {
-            Ok((job, rid)) => {
-                let handle = IngestJobHandle::insert(FfiIngestJob {
-                    job,
-                    result_rid: Some(rid),
-                });
-                // SAFETY: out_job checked non-null above; caller owns it.
-                unsafe { *out_job = handle };
-                0
-            }
-            Err(err) => fail_sdk(err),
-        }
+        finish_upload(
+            block_on(
+                client
+                    .ingest()
+                    .upload_mcap(&file_path, dataset_rid.as_str(), ingest),
+            ),
+            out_job,
+        )
     })
 }
 
@@ -941,33 +956,31 @@ pub extern "C" fn nominal_ingest_dataflash(
             return fail(NominalErrorCode::NullArgument, "out_job must not be null");
         }
 
-        let file_tags = staging
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .file_tags
-            .clone();
-        let mut ingest = DataflashIngest::new();
-        for (tag, value) in file_tags {
-            ingest = ingest.additional_file_tag(tag, value);
-        }
+        let ingest = build_dataflash_ingest(&staging);
 
-        match block_on(client.ingest().upload_ardupilot_dataflash(
-            &file_path,
-            dataset_rid.as_str(),
-            ingest,
-        )) {
-            Ok((job, rid)) => {
-                let handle = IngestJobHandle::insert(FfiIngestJob {
-                    job,
-                    result_rid: Some(rid),
-                });
-                // SAFETY: out_job checked non-null above; caller owns it.
-                unsafe { *out_job = handle };
-                0
-            }
-            Err(err) => fail_sdk(err),
-        }
+        finish_upload(
+            block_on(client.ingest().upload_ardupilot_dataflash(
+                &file_path,
+                dataset_rid.as_str(),
+                ingest,
+            )),
+            out_job,
+        )
     })
+}
+
+/// Builds the upstream `DataflashIngest` from staged params.
+fn build_dataflash_ingest(staging: &Mutex<DataflashIngestParams>) -> DataflashIngest {
+    let file_tags = staging
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .file_tags
+        .clone();
+    let mut ingest = DataflashIngest::new();
+    for (tag, value) in file_tags {
+        ingest = ingest.additional_file_tag(tag, value);
+    }
+    ingest
 }
 
 // ---------------------------------------------------------------------------
@@ -1011,22 +1024,14 @@ pub extern "C" fn nominal_ingest_journal_json(
             ingest = ingest.channel(channel);
         }
 
-        match block_on(client.ingest().upload_journal_json(
-            &file_path,
-            dataset_rid.as_str(),
-            ingest,
-        )) {
-            Ok((job, rid)) => {
-                let handle = IngestJobHandle::insert(FfiIngestJob {
-                    job,
-                    result_rid: Some(rid),
-                });
-                // SAFETY: out_job checked non-null above; caller owns it.
-                unsafe { *out_job = handle };
-                0
-            }
-            Err(err) => fail_sdk(err),
-        }
+        finish_upload(
+            block_on(
+                client
+                    .ingest()
+                    .upload_journal_json(&file_path, dataset_rid.as_str(), ingest),
+            ),
+            out_job,
+        )
     })
 }
 
@@ -1056,22 +1061,14 @@ pub extern "C" fn nominal_ingest_avro_stream(
             return fail(NominalErrorCode::NullArgument, "out_job must not be null");
         }
 
-        match block_on(client.ingest().upload_avro_stream(
-            &file_path,
-            dataset_rid.as_str(),
-            AvroStreamIngest::new(),
-        )) {
-            Ok((job, rid)) => {
-                let handle = IngestJobHandle::insert(FfiIngestJob {
-                    job,
-                    result_rid: Some(rid),
-                });
-                // SAFETY: out_job checked non-null above; caller owns it.
-                unsafe { *out_job = handle };
-                0
-            }
-            Err(err) => fail_sdk(err),
-        }
+        finish_upload(
+            block_on(client.ingest().upload_avro_stream(
+                &file_path,
+                dataset_rid.as_str(),
+                AvroStreamIngest::new(),
+            )),
+            out_job,
+        )
     })
 }
 
@@ -1108,22 +1105,14 @@ pub extern "C" fn nominal_ingest_video(
             return fail(NominalErrorCode::NullArgument, "out_job must not be null");
         }
 
-        match block_on(client.ingest().upload_video(
-            &file_path,
-            video_rid.as_str(),
-            VideoIngest::starting_at(start),
-        )) {
-            Ok((job, rid)) => {
-                let handle = IngestJobHandle::insert(FfiIngestJob {
-                    job,
-                    result_rid: Some(rid),
-                });
-                // SAFETY: out_job checked non-null above; caller owns it.
-                unsafe { *out_job = handle };
-                0
-            }
-            Err(err) => fail_sdk(err),
-        }
+        finish_upload(
+            block_on(client.ingest().upload_video(
+                &file_path,
+                video_rid.as_str(),
+                VideoIngest::starting_at(start),
+            )),
+            out_job,
+        )
     })
 }
 
@@ -1161,22 +1150,347 @@ pub extern "C" fn nominal_ingest_video_mcap(
             return fail(NominalErrorCode::NullArgument, "out_job must not be null");
         }
 
-        match block_on(client.ingest().upload_video(
-            &file_path,
-            video_rid.as_str(),
-            VideoIngest::mcap_topic(topic),
-        )) {
-            Ok((job, rid)) => {
-                let handle = IngestJobHandle::insert(FfiIngestJob {
-                    job,
-                    result_rid: Some(rid),
-                });
-                // SAFETY: out_job checked non-null above; caller owns it.
-                unsafe { *out_job = handle };
-                0
-            }
-            Err(err) => fail_sdk(err),
+        finish_upload(
+            block_on(client.ingest().upload_video(
+                &file_path,
+                video_rid.as_str(),
+                VideoIngest::mcap_topic(topic),
+            )),
+            out_job,
+        )
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Ingest into a NEW dataset / video
+//
+// Same formats as above, but instead of an existing target RID these take a
+// dataset-create (or video-create) staging handle — the same one
+// `nominal_dataset_create_begin` / `nominal_video_create_begin` build — and
+// the target is created atomically with the ingest: a failed ingest leaves
+// no dataset/video behind. Read the created RID back with
+// `nominal_ingest_job_result_rid` on the returned job handle. Neither
+// staging handle is freed by these calls.
+// ---------------------------------------------------------------------------
+
+/// Like `nominal_ingest_csv`, but ingests into a NEW dataset described by
+/// `dataset_create` (a `nominal_dataset_create_begin` staging handle),
+/// created atomically with the ingest.
+#[no_mangle]
+pub extern "C" fn nominal_ingest_csv_new_dataset(
+    client: i32,
+    staging: i32,
+    file_path: *const c_char,
+    dataset_create: i32,
+    out_job: *mut i32,
+) -> i32 {
+    guard(|| {
+        let client = lookup_handle!(ClientHandle, client);
+        let staging = lookup_handle!(TabularIngestStagingHandle, staging);
+        let dataset_create = lookup_handle!(DatasetCreateStagingHandle, dataset_create);
+        let file_path = match read_required_str(file_path, "file_path") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if out_job.is_null() {
+            return fail(NominalErrorCode::NullArgument, "out_job must not be null");
         }
+        let ingest = match build_csv_ingest(&staging) {
+            Ok(ingest) => ingest,
+            Err(code) => return code,
+        };
+        let create = dataset_create
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .to_create();
+
+        finish_upload(
+            block_on(client.ingest().upload_csv(&file_path, create, ingest)),
+            out_job,
+        )
+    })
+}
+
+/// Like `nominal_ingest_parquet`, but ingests into a NEW dataset described
+/// by `dataset_create` (a `nominal_dataset_create_begin` staging handle),
+/// created atomically with the ingest.
+#[no_mangle]
+pub extern "C" fn nominal_ingest_parquet_new_dataset(
+    client: i32,
+    staging: i32,
+    file_path: *const c_char,
+    dataset_create: i32,
+    out_job: *mut i32,
+) -> i32 {
+    guard(|| {
+        let client = lookup_handle!(ClientHandle, client);
+        let staging = lookup_handle!(TabularIngestStagingHandle, staging);
+        let dataset_create = lookup_handle!(DatasetCreateStagingHandle, dataset_create);
+        let file_path = match read_required_str(file_path, "file_path") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if out_job.is_null() {
+            return fail(NominalErrorCode::NullArgument, "out_job must not be null");
+        }
+        let ingest = match build_parquet_ingest(&staging) {
+            Ok(ingest) => ingest,
+            Err(code) => return code,
+        };
+        let create = dataset_create
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .to_create();
+
+        finish_upload(
+            block_on(client.ingest().upload_parquet(&file_path, create, ingest)),
+            out_job,
+        )
+    })
+}
+
+/// Like `nominal_ingest_mcap`, but ingests into a NEW dataset described by
+/// `dataset_create` (a `nominal_dataset_create_begin` staging handle),
+/// created atomically with the ingest.
+#[no_mangle]
+pub extern "C" fn nominal_ingest_mcap_new_dataset(
+    client: i32,
+    staging: i32,
+    file_path: *const c_char,
+    dataset_create: i32,
+    out_job: *mut i32,
+) -> i32 {
+    guard(|| {
+        let client = lookup_handle!(ClientHandle, client);
+        let staging = lookup_handle!(McapIngestStagingHandle, staging);
+        let dataset_create = lookup_handle!(DatasetCreateStagingHandle, dataset_create);
+        let file_path = match read_required_str(file_path, "file_path") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if out_job.is_null() {
+            return fail(NominalErrorCode::NullArgument, "out_job must not be null");
+        }
+        let ingest = match build_mcap_ingest(&staging) {
+            Ok(ingest) => ingest,
+            Err(code) => return code,
+        };
+        let create = dataset_create
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .to_create();
+
+        finish_upload(
+            block_on(client.ingest().upload_mcap(&file_path, create, ingest)),
+            out_job,
+        )
+    })
+}
+
+/// Like `nominal_ingest_journal_json`, but ingests into a NEW dataset
+/// described by `dataset_create` (a `nominal_dataset_create_begin` staging
+/// handle), created atomically with the ingest.
+#[no_mangle]
+pub extern "C" fn nominal_ingest_journal_json_new_dataset(
+    client: i32,
+    file_path: *const c_char,
+    dataset_create: i32,
+    channel: *const c_char,
+    out_job: *mut i32,
+) -> i32 {
+    guard(|| {
+        let client = lookup_handle!(ClientHandle, client);
+        let dataset_create = lookup_handle!(DatasetCreateStagingHandle, dataset_create);
+        let file_path = match read_required_str(file_path, "file_path") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        let channel = match read_optional_str(channel, "channel") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if out_job.is_null() {
+            return fail(NominalErrorCode::NullArgument, "out_job must not be null");
+        }
+        let mut ingest = JournalJsonIngest::new();
+        if let Some(channel) = channel {
+            ingest = ingest.channel(channel);
+        }
+        let create = dataset_create
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .to_create();
+
+        finish_upload(
+            block_on(
+                client
+                    .ingest()
+                    .upload_journal_json(&file_path, create, ingest),
+            ),
+            out_job,
+        )
+    })
+}
+
+/// Like `nominal_ingest_avro_stream`, but ingests into a NEW dataset
+/// described by `dataset_create` (a `nominal_dataset_create_begin` staging
+/// handle), created atomically with the ingest.
+#[no_mangle]
+pub extern "C" fn nominal_ingest_avro_stream_new_dataset(
+    client: i32,
+    file_path: *const c_char,
+    dataset_create: i32,
+    out_job: *mut i32,
+) -> i32 {
+    guard(|| {
+        let client = lookup_handle!(ClientHandle, client);
+        let dataset_create = lookup_handle!(DatasetCreateStagingHandle, dataset_create);
+        let file_path = match read_required_str(file_path, "file_path") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if out_job.is_null() {
+            return fail(NominalErrorCode::NullArgument, "out_job must not be null");
+        }
+        let create = dataset_create
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .to_create();
+
+        finish_upload(
+            block_on(client.ingest().upload_avro_stream(
+                &file_path,
+                create,
+                AvroStreamIngest::new(),
+            )),
+            out_job,
+        )
+    })
+}
+
+/// Like `nominal_ingest_dataflash`, but ingests into a NEW dataset described
+/// by `dataset_create` (a `nominal_dataset_create_begin` staging handle),
+/// created atomically with the ingest.
+#[no_mangle]
+pub extern "C" fn nominal_ingest_dataflash_new_dataset(
+    client: i32,
+    staging: i32,
+    file_path: *const c_char,
+    dataset_create: i32,
+    out_job: *mut i32,
+) -> i32 {
+    guard(|| {
+        let client = lookup_handle!(ClientHandle, client);
+        let staging = lookup_handle!(DataflashIngestStagingHandle, staging);
+        let dataset_create = lookup_handle!(DatasetCreateStagingHandle, dataset_create);
+        let file_path = match read_required_str(file_path, "file_path") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if out_job.is_null() {
+            return fail(NominalErrorCode::NullArgument, "out_job must not be null");
+        }
+        let ingest = build_dataflash_ingest(&staging);
+        let create = dataset_create
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .to_create();
+
+        finish_upload(
+            block_on(
+                client
+                    .ingest()
+                    .upload_ardupilot_dataflash(&file_path, create, ingest),
+            ),
+            out_job,
+        )
+    })
+}
+
+/// Like `nominal_ingest_video`, but ingests into a NEW video resource
+/// described by `video_create` (a `nominal_video_create_begin` staging
+/// handle), created atomically with the ingest. The created video's RID
+/// comes back via `nominal_ingest_job_result_rid`.
+#[no_mangle]
+pub extern "C" fn nominal_ingest_video_new(
+    client: i32,
+    file_path: *const c_char,
+    video_create: i32,
+    start_ms: f64,
+    out_job: *mut i32,
+) -> i32 {
+    guard(|| {
+        let client = lookup_handle!(ClientHandle, client);
+        let video_create = lookup_handle!(VideoCreateStagingHandle, video_create);
+        let file_path = match read_required_str(file_path, "file_path") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        let start = match ms_to_datetime(start_ms, "start_ms") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if out_job.is_null() {
+            return fail(NominalErrorCode::NullArgument, "out_job must not be null");
+        }
+        let create = video_create
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .to_create();
+
+        finish_upload(
+            block_on(client.ingest().upload_video(
+                &file_path,
+                create,
+                VideoIngest::starting_at(start),
+            )),
+            out_job,
+        )
+    })
+}
+
+/// Like `nominal_ingest_video_mcap`, but ingests into a NEW video resource
+/// described by `video_create` (a `nominal_video_create_begin` staging
+/// handle), created atomically with the ingest. The created video's RID
+/// comes back via `nominal_ingest_job_result_rid`.
+#[no_mangle]
+pub extern "C" fn nominal_ingest_video_mcap_new(
+    client: i32,
+    file_path: *const c_char,
+    video_create: i32,
+    topic: *const c_char,
+    out_job: *mut i32,
+) -> i32 {
+    guard(|| {
+        let client = lookup_handle!(ClientHandle, client);
+        let video_create = lookup_handle!(VideoCreateStagingHandle, video_create);
+        let file_path = match read_required_str(file_path, "file_path") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        let topic = match read_required_str(topic, "topic") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if topic.is_empty() {
+            return fail(NominalErrorCode::InvalidArgument, "topic must not be empty");
+        }
+        if out_job.is_null() {
+            return fail(NominalErrorCode::NullArgument, "out_job must not be null");
+        }
+        let create = video_create
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .to_create();
+
+        finish_upload(
+            block_on(client.ingest().upload_video(
+                &file_path,
+                create,
+                VideoIngest::mcap_topic(topic),
+            )),
+            out_job,
+        )
     })
 }
 

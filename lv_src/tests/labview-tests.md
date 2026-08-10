@@ -19,6 +19,7 @@ run. Status as of 2026-08-08:
 | 12. Data-source attach | asset/run attach VIs, series-tag staging, scope-name conflict | NOT YET RUN |
 | 13. MCAP ingest | mcap staging VIs, topic filters, non-tabular job flow | NOT YET RUN |
 | 14. Video ingest | video upload VI, f64 start time, video-RID job result | NOT YET RUN |
+| 15. Ingest into new dataset | csv new-dataset VI, create staging reuse, result RID = created dataset | NOT YET RUN |
 
 Re-run all three after any re-import, and after any DLL change that touches
 signatures.
@@ -506,3 +507,31 @@ playable clip in the app. Any short `.mp4` on disk works.
    have one.)
 8. Cleanup: free job + both video handles; archive the video only after
    you've looked at it. `nominal client free.vi`.
+
+## Test 15 — Ingest into a NEW dataset (NOT YET RUN)
+
+Exercises the atomic create-with-ingest path: no `nominal dataset create
+commit.vi` call anywhere — the dataset-create staging handle rides into the
+ingest call and the server creates the dataset only if the ingest is
+accepted. Uses the same CSV as Test 8. The `_new_dataset` variants of the
+other formats and the `_new` video variants share this exact plumbing; this
+one CSV pass covers the pattern.
+
+1. `nominal client new.vi` — real token.
+2. `nominal ingest tabular begin.vi` + a timestamp spec (epoch-seconds on
+   `time`, as in Test 8) → ingest staging.
+3. `nominal dataset create begin.vi` — name `labview-ffi-new-ds-test` →
+   create staging. Add a label (`from-labview`) and a property
+   (`origin` = `test-15`).
+4. `nominal ingest csv new dataset.vi` — client, ingest staging, the CSV
+   path, the CREATE staging handle (not a RID) → job handle.
+5. `ingest job result rid` — is_present true; this is the RID of the
+   dataset that did not exist a second ago. `nominal dataset get.vi` on it →
+   name is `labview-ffi-new-ds-test`, label and property present.
+6. `nominal ingest job wait.vi` → status 3; `nominal channel list.vi` on the
+   new RID → `temp` channel exists.
+7. Reuse check: call step 4 again with the same two staging handles → a
+   SECOND dataset appears (same name, new RID) — both stagings survive
+   commits.
+8. Cleanup: free both staging handles, both job handles, dataset handles;
+   archive both created datasets; `nominal client free.vi`.

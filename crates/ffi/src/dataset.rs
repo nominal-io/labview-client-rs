@@ -365,6 +365,28 @@ pub(crate) struct DatasetCreateParams {
     properties: HashMap<String, String>,
 }
 
+impl DatasetCreateParams {
+    /// Builds the upstream request from the accumulated fields. Shared by
+    /// `nominal_dataset_create_commit` and the `nominal_ingest_*_new_dataset`
+    /// functions (which create the dataset atomically with an ingest).
+    pub(crate) fn to_create(&self) -> DatasetCreate {
+        let mut create = DatasetCreate::new(self.name.clone());
+        if let Some(description) = &self.description {
+            create = create.description(description.clone());
+        }
+        if let Some(delimiter) = &self.channel_delimiter {
+            create = create.channel_delimiter(delimiter.clone());
+        }
+        if !self.labels.is_empty() {
+            create = create.labels(self.labels.clone());
+        }
+        if !self.properties.is_empty() {
+            create = create.properties(self.properties.clone());
+        }
+        create
+    }
+}
+
 handle_registry!(DatasetCreateStagingHandle, Mutex<DatasetCreateParams>);
 
 /// Starts staging a dataset-create request with the (required) name. Add
@@ -516,25 +538,10 @@ pub extern "C" fn nominal_dataset_create_commit(
             );
         }
 
-        let create = {
-            let params = staging
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-            let mut create = DatasetCreate::new(params.name.clone());
-            if let Some(description) = &params.description {
-                create = create.description(description.clone());
-            }
-            if let Some(delimiter) = &params.channel_delimiter {
-                create = create.channel_delimiter(delimiter.clone());
-            }
-            if !params.labels.is_empty() {
-                create = create.labels(params.labels.clone());
-            }
-            if !params.properties.is_empty() {
-                create = create.properties(params.properties.clone());
-            }
-            create
-        };
+        let create = staging
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .to_create();
 
         match block_on(client.catalog().create_dataset(create)) {
             Ok(dataset) => {

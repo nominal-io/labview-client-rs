@@ -13,20 +13,25 @@ use wiremock::matchers::{body_partial_json, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use nominal_ffi::client::{nominal_client_free, nominal_client_new};
+use nominal_ffi::dataset::{
+    nominal_dataset_create_add_label, nominal_dataset_create_begin, nominal_dataset_create_free,
+};
 use nominal_ffi::error::NominalErrorCode;
 use nominal_ffi::ingest::{
-    nominal_ingest_avro_stream, nominal_ingest_csv, nominal_ingest_dataflash,
-    nominal_ingest_dataflash_add_file_tag, nominal_ingest_dataflash_begin,
-    nominal_ingest_dataflash_free, nominal_ingest_job_free, nominal_ingest_job_get,
-    nominal_ingest_job_result_rid, nominal_ingest_job_rid, nominal_ingest_job_status,
-    nominal_ingest_job_wait, nominal_ingest_journal_json, nominal_ingest_mcap,
-    nominal_ingest_mcap_add_file_tag, nominal_ingest_mcap_begin, nominal_ingest_mcap_exclude_topic,
-    nominal_ingest_mcap_free, nominal_ingest_mcap_include_topic,
+    nominal_ingest_avro_stream, nominal_ingest_csv, nominal_ingest_csv_new_dataset,
+    nominal_ingest_dataflash, nominal_ingest_dataflash_add_file_tag,
+    nominal_ingest_dataflash_begin, nominal_ingest_dataflash_free, nominal_ingest_job_free,
+    nominal_ingest_job_get, nominal_ingest_job_result_rid, nominal_ingest_job_rid,
+    nominal_ingest_job_status, nominal_ingest_job_wait, nominal_ingest_journal_json,
+    nominal_ingest_mcap, nominal_ingest_mcap_add_file_tag, nominal_ingest_mcap_begin,
+    nominal_ingest_mcap_exclude_topic, nominal_ingest_mcap_free, nominal_ingest_mcap_include_topic,
     nominal_ingest_mcap_set_ignore_invalid_topics, nominal_ingest_tabular_add_file_tag,
     nominal_ingest_tabular_begin, nominal_ingest_tabular_free,
     nominal_ingest_tabular_set_is_archive, nominal_ingest_tabular_set_timestamp_epoch,
-    nominal_ingest_video, nominal_ingest_video_mcap,
+    nominal_ingest_video, nominal_ingest_video_mcap, nominal_ingest_video_mcap_new,
+    nominal_ingest_video_new,
 };
+use nominal_ffi::video::{nominal_video_create_begin, nominal_video_create_free};
 
 const DATASET_RID: &str =
     "ri.catalog.cerulean-staging.dataset.00000000-0000-0000-0000-000000000002";
@@ -643,6 +648,131 @@ fn video_mcap_sends_topic_manifest() {
 
     nominal_client_free(client);
     let _ = std::fs::remove_file(mcap);
+}
+
+#[test]
+fn csv_new_dataset_sends_create_fields_atomically() {
+    let server = start_server();
+    mount_upload_pipeline(&server);
+    // The trigger only matches when the new-dataset target carries the
+    // staged name and label — the create rides inside the ingest request.
+    mount_trigger(
+        &server,
+        json!({
+            "type": "csv",
+            "csv": {
+                "target": {
+                    "type": "new",
+                    "new": {
+                        "datasetName": "lv-new-ds",
+                        "labels": ["from-labview"]
+                    }
+                }
+            }
+        }),
+        dataset_details(),
+    );
+    let client = new_client(&server);
+    let csv = temp_csv("new_ds");
+
+    let mut staging = 0i32;
+    assert_eq!(nominal_ingest_tabular_begin(&mut staging), 0);
+    let column = cstr("time");
+    assert_eq!(
+        nominal_ingest_tabular_set_timestamp_epoch(staging, column.as_ptr(), 3),
+        0
+    );
+
+    let mut create = 0i32;
+    let name = cstr("lv-new-ds");
+    assert_eq!(nominal_dataset_create_begin(name.as_ptr(), &mut create), 0);
+    let label = cstr("from-labview");
+    assert_eq!(nominal_dataset_create_add_label(create, label.as_ptr()), 0);
+
+    let file_path = cstr(csv.to_str().unwrap());
+    let mut job = 0i32;
+    let code =
+        nominal_ingest_csv_new_dataset(client, staging, file_path.as_ptr(), create, &mut job);
+    assert_eq!(code, 0, "ingest_csv_new_dataset failed: {}", last_error());
+    // The result RID is the freshly-created dataset.
+    assert_result_rid_and_free(job, DATASET_RID);
+
+    // Neither staging handle is consumed by the ingest call.
+    assert_eq!(nominal_ingest_tabular_free(staging), 0);
+    assert_eq!(nominal_dataset_create_free(create), 0);
+    nominal_client_free(client);
+    let _ = std::fs::remove_file(csv);
+}
+
+#[test]
+fn video_new_sends_title_and_start_time() {
+    let server = start_server();
+    mount_upload_pipeline(&server);
+    mount_trigger(
+        &server,
+        json!({
+            "type": "video",
+            "video": {
+                "target": {"type": "new", "new": {"title": "lv-new-video"}},
+                "timestampManifest": {
+                    "type": "noManifest",
+                    "noManifest": {
+                        "startingTimestamp": {"seconds": 1_705_314_600i64, "nanos": 0i64}
+                    }
+                }
+            }
+        }),
+        json!({"type": "video", "video": {"videoRid": VIDEO_RID, "videoFileRid": "ri.catalog.cerulean-staging.video-file.00000000-0000-0000-0000-000000000009"}}),
+    );
+    let client = new_client(&server);
+    let mp4 = temp_file("video_new", "mp4", "not-a-real-mp4");
+
+    let mut create = 0i32;
+    let name = cstr("lv-new-video");
+    assert_eq!(nominal_video_create_begin(name.as_ptr(), &mut create), 0);
+
+    let file_path = cstr(mp4.to_str().unwrap());
+    let mut job = 0i32;
+    let code = nominal_ingest_video_new(
+        client,
+        file_path.as_ptr(),
+        create,
+        1_705_314_600_000.0,
+        &mut job,
+    );
+    assert_eq!(code, 0, "ingest_video_new failed: {}", last_error());
+    assert_result_rid_and_free(job, VIDEO_RID);
+
+    assert_eq!(nominal_video_create_free(create), 0);
+    nominal_client_free(client);
+    let _ = std::fs::remove_file(mp4);
+}
+
+#[test]
+fn new_target_calls_reject_invalid_create_handles() {
+    let _guard = common::message_lock();
+    let server = start_server();
+    let client = new_client(&server);
+    let csv = temp_csv("bad_create");
+
+    let mut staging = 0i32;
+    assert_eq!(nominal_ingest_tabular_begin(&mut staging), 0);
+    let file_path = cstr(csv.to_str().unwrap());
+    let mut job = 0i32;
+    // Handle 0 is reserved and never valid as a dataset-create staging.
+    assert_eq!(
+        nominal_ingest_csv_new_dataset(client, staging, file_path.as_ptr(), 0, &mut job),
+        NominalErrorCode::InvalidHandle as i32
+    );
+    let topic = cstr("/cam0");
+    assert_eq!(
+        nominal_ingest_video_mcap_new(client, file_path.as_ptr(), 0, topic.as_ptr(), &mut job),
+        NominalErrorCode::InvalidHandle as i32
+    );
+
+    nominal_ingest_tabular_free(staging);
+    nominal_client_free(client);
+    let _ = std::fs::remove_file(csv);
 }
 
 #[test]

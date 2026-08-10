@@ -1104,6 +1104,95 @@ int32_t nominal_ingest_video_mcap(int32_t client,
                                   int32_t *out_job);
 
 /*
+ Like `nominal_ingest_csv`, but ingests into a NEW dataset described by
+ `dataset_create` (a `nominal_dataset_create_begin` staging handle),
+ created atomically with the ingest.
+ */
+int32_t nominal_ingest_csv_new_dataset(int32_t client,
+                                       int32_t staging,
+                                       const char *file_path,
+                                       int32_t dataset_create,
+                                       int32_t *out_job);
+
+/*
+ Like `nominal_ingest_parquet`, but ingests into a NEW dataset described
+ by `dataset_create` (a `nominal_dataset_create_begin` staging handle),
+ created atomically with the ingest.
+ */
+int32_t nominal_ingest_parquet_new_dataset(int32_t client,
+                                           int32_t staging,
+                                           const char *file_path,
+                                           int32_t dataset_create,
+                                           int32_t *out_job);
+
+/*
+ Like `nominal_ingest_mcap`, but ingests into a NEW dataset described by
+ `dataset_create` (a `nominal_dataset_create_begin` staging handle),
+ created atomically with the ingest.
+ */
+int32_t nominal_ingest_mcap_new_dataset(int32_t client,
+                                        int32_t staging,
+                                        const char *file_path,
+                                        int32_t dataset_create,
+                                        int32_t *out_job);
+
+/*
+ Like `nominal_ingest_journal_json`, but ingests into a NEW dataset
+ described by `dataset_create` (a `nominal_dataset_create_begin` staging
+ handle), created atomically with the ingest.
+ */
+int32_t nominal_ingest_journal_json_new_dataset(int32_t client,
+                                                const char *file_path,
+                                                int32_t dataset_create,
+                                                const char *channel,
+                                                int32_t *out_job);
+
+/*
+ Like `nominal_ingest_avro_stream`, but ingests into a NEW dataset
+ described by `dataset_create` (a `nominal_dataset_create_begin` staging
+ handle), created atomically with the ingest.
+ */
+int32_t nominal_ingest_avro_stream_new_dataset(int32_t client,
+                                               const char *file_path,
+                                               int32_t dataset_create,
+                                               int32_t *out_job);
+
+/*
+ Like `nominal_ingest_dataflash`, but ingests into a NEW dataset described
+ by `dataset_create` (a `nominal_dataset_create_begin` staging handle),
+ created atomically with the ingest.
+ */
+int32_t nominal_ingest_dataflash_new_dataset(int32_t client,
+                                             int32_t staging,
+                                             const char *file_path,
+                                             int32_t dataset_create,
+                                             int32_t *out_job);
+
+/*
+ Like `nominal_ingest_video`, but ingests into a NEW video resource
+ described by `video_create` (a `nominal_video_create_begin` staging
+ handle), created atomically with the ingest. The created video's RID
+ comes back via `nominal_ingest_job_result_rid`.
+ */
+int32_t nominal_ingest_video_new(int32_t client,
+                                 const char *file_path,
+                                 int32_t video_create,
+                                 double start_ms,
+                                 int32_t *out_job);
+
+/*
+ Like `nominal_ingest_video_mcap`, but ingests into a NEW video resource
+ described by `video_create` (a `nominal_video_create_begin` staging
+ handle), created atomically with the ingest. The created video's RID
+ comes back via `nominal_ingest_job_result_rid`.
+ */
+int32_t nominal_ingest_video_mcap_new(int32_t client,
+                                      const char *file_path,
+                                      int32_t video_create,
+                                      const char *topic,
+                                      int32_t *out_job);
+
+/*
  Fetches the current state of the ingest job with the given RID, writing a
  job handle to `out_job` (free with `nominal_ingest_job_free`).
  */
