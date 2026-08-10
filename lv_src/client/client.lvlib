@@ -93,6 +93,25 @@
 	<Item Name="nominal handle list count.vi" Type="VI" URL="../VIs/nominal handle list count.vi"/>
 	<Item Name="nominal handle list free.vi" Type="VI" URL="../VIs/nominal handle list free.vi"/>
 	<Item Name="nominal handle list get.vi" Type="VI" URL="../VIs/nominal handle list get.vi"/>
+	<Item Name="nominal ingest csv.vi" Type="VI" URL="../VIs/nominal ingest csv.vi"/>
+	<Item Name="nominal ingest job free.vi" Type="VI" URL="../VIs/nominal ingest job free.vi"/>
+	<Item Name="nominal ingest job get.vi" Type="VI" URL="../VIs/nominal ingest job get.vi"/>
+	<Item Name="nominal ingest job result rid.vi" Type="VI" URL="../VIs/nominal ingest job result rid.vi"/>
+	<Item Name="nominal ingest job rid.vi" Type="VI" URL="../VIs/nominal ingest job rid.vi"/>
+	<Item Name="nominal ingest job status.vi" Type="VI" URL="../VIs/nominal ingest job status.vi"/>
+	<Item Name="nominal ingest job wait.vi" Type="VI" URL="../VIs/nominal ingest job wait.vi"/>
+	<Item Name="nominal ingest parquet.vi" Type="VI" URL="../VIs/nominal ingest parquet.vi"/>
+	<Item Name="nominal ingest tabular add file tag.vi" Type="VI" URL="../VIs/nominal ingest tabular add file tag.vi"/>
+	<Item Name="nominal ingest tabular add tag column.vi" Type="VI" URL="../VIs/nominal ingest tabular add tag column.vi"/>
+	<Item Name="nominal ingest tabular begin.vi" Type="VI" URL="../VIs/nominal ingest tabular begin.vi"/>
+	<Item Name="nominal ingest tabular exclude column.vi" Type="VI" URL="../VIs/nominal ingest tabular exclude column.vi"/>
+	<Item Name="nominal ingest tabular free.vi" Type="VI" URL="../VIs/nominal ingest tabular free.vi"/>
+	<Item Name="nominal ingest tabular set channel prefix.vi" Type="VI" URL="../VIs/nominal ingest tabular set channel prefix.vi"/>
+	<Item Name="nominal ingest tabular set is archive.vi" Type="VI" URL="../VIs/nominal ingest tabular set is archive.vi"/>
+	<Item Name="nominal ingest tabular set timestamp custom.vi" Type="VI" URL="../VIs/nominal ingest tabular set timestamp custom.vi"/>
+	<Item Name="nominal ingest tabular set timestamp epoch.vi" Type="VI" URL="../VIs/nominal ingest tabular set timestamp epoch.vi"/>
+	<Item Name="nominal ingest tabular set timestamp iso8601.vi" Type="VI" URL="../VIs/nominal ingest tabular set timestamp iso8601.vi"/>
+	<Item Name="nominal ingest tabular set timestamp relative.vi" Type="VI" URL="../VIs/nominal ingest tabular set timestamp relative.vi"/>
 	<Item Name="nominal last error.vi" Type="VI" URL="../VIs/nominal last error.vi"/>
 	<Item Name="nominal run archive.vi" Type="VI" URL="../VIs/nominal run archive.vi"/>
 	<Item Name="nominal run asset count.vi" Type="VI" URL="../VIs/nominal run asset count.vi"/>
