@@ -50,5 +50,49 @@
 	<Item Name="nominal handle list free.vi" Type="VI" URL="../VIs/nominal handle list free.vi"/>
 	<Item Name="nominal handle list get.vi" Type="VI" URL="../VIs/nominal handle list get.vi"/>
 	<Item Name="nominal last error.vi" Type="VI" URL="../VIs/nominal last error.vi"/>
+	<Item Name="nominal run archive.vi" Type="VI" URL="../VIs/nominal run archive.vi"/>
+	<Item Name="nominal run asset count.vi" Type="VI" URL="../VIs/nominal run asset count.vi"/>
+	<Item Name="nominal run asset rid at.vi" Type="VI" URL="../VIs/nominal run asset rid at.vi"/>
+	<Item Name="nominal run create add asset.vi" Type="VI" URL="../VIs/nominal run create add asset.vi"/>
+	<Item Name="nominal run create add label.vi" Type="VI" URL="../VIs/nominal run create add label.vi"/>
+	<Item Name="nominal run create begin.vi" Type="VI" URL="../VIs/nominal run create begin.vi"/>
+	<Item Name="nominal run create commit.vi" Type="VI" URL="../VIs/nominal run create commit.vi"/>
+	<Item Name="nominal run create free.vi" Type="VI" URL="../VIs/nominal run create free.vi"/>
+	<Item Name="nominal run create set description.vi" Type="VI" URL="../VIs/nominal run create set description.vi"/>
+	<Item Name="nominal run create set end.vi" Type="VI" URL="../VIs/nominal run create set end.vi"/>
+	<Item Name="nominal run create set property.vi" Type="VI" URL="../VIs/nominal run create set property.vi"/>
+	<Item Name="nominal run create.vi" Type="VI" URL="../VIs/nominal run create.vi"/>
+	<Item Name="nominal run created at.vi" Type="VI" URL="../VIs/nominal run created at.vi"/>
+	<Item Name="nominal run data source count.vi" Type="VI" URL="../VIs/nominal run data source count.vi"/>
+	<Item Name="nominal run data source name at.vi" Type="VI" URL="../VIs/nominal run data source name at.vi"/>
+	<Item Name="nominal run data source rid at.vi" Type="VI" URL="../VIs/nominal run data source rid at.vi"/>
+	<Item Name="nominal run data source type at.vi" Type="VI" URL="../VIs/nominal run data source type at.vi"/>
+	<Item Name="nominal run description.vi" Type="VI" URL="../VIs/nominal run description.vi"/>
+	<Item Name="nominal run end.vi" Type="VI" URL="../VIs/nominal run end.vi"/>
+	<Item Name="nominal run free.vi" Type="VI" URL="../VIs/nominal run free.vi"/>
+	<Item Name="nominal run get.vi" Type="VI" URL="../VIs/nominal run get.vi"/>
+	<Item Name="nominal run label at.vi" Type="VI" URL="../VIs/nominal run label at.vi"/>
+	<Item Name="nominal run label count.vi" Type="VI" URL="../VIs/nominal run label count.vi"/>
+	<Item Name="nominal run list.vi" Type="VI" URL="../VIs/nominal run list.vi"/>
+	<Item Name="nominal run name.vi" Type="VI" URL="../VIs/nominal run name.vi"/>
+	<Item Name="nominal run number.vi" Type="VI" URL="../VIs/nominal run number.vi"/>
+	<Item Name="nominal run property count.vi" Type="VI" URL="../VIs/nominal run property count.vi"/>
+	<Item Name="nominal run property key at.vi" Type="VI" URL="../VIs/nominal run property key at.vi"/>
+	<Item Name="nominal run property value at.vi" Type="VI" URL="../VIs/nominal run property value at.vi"/>
+	<Item Name="nominal run rid.vi" Type="VI" URL="../VIs/nominal run rid.vi"/>
+	<Item Name="nominal run search.vi" Type="VI" URL="../VIs/nominal run search.vi"/>
+	<Item Name="nominal run start.vi" Type="VI" URL="../VIs/nominal run start.vi"/>
+	<Item Name="nominal run unarchive.vi" Type="VI" URL="../VIs/nominal run unarchive.vi"/>
+	<Item Name="nominal run update add label.vi" Type="VI" URL="../VIs/nominal run update add label.vi"/>
+	<Item Name="nominal run update begin.vi" Type="VI" URL="../VIs/nominal run update begin.vi"/>
+	<Item Name="nominal run update commit.vi" Type="VI" URL="../VIs/nominal run update commit.vi"/>
+	<Item Name="nominal run update free.vi" Type="VI" URL="../VIs/nominal run update free.vi"/>
+	<Item Name="nominal run update set description.vi" Type="VI" URL="../VIs/nominal run update set description.vi"/>
+	<Item Name="nominal run update set end.vi" Type="VI" URL="../VIs/nominal run update set end.vi"/>
+	<Item Name="nominal run update set name.vi" Type="VI" URL="../VIs/nominal run update set name.vi"/>
+	<Item Name="nominal run update set property.vi" Type="VI" URL="../VIs/nominal run update set property.vi"/>
+	<Item Name="nominal run update set start.vi" Type="VI" URL="../VIs/nominal run update set start.vi"/>
+	<Item Name="nominal run update.vi" Type="VI" URL="../VIs/nominal run update.vi"/>
+	<Item Name="nominal run url.vi" Type="VI" URL="../VIs/nominal run url.vi"/>
 	<Item Name="nominalClient_64.dll" Type="Document" URL="../nominalClient_64.dll"/>
 </Library>
