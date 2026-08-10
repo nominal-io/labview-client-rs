@@ -44,6 +44,16 @@
 	<Item Name="nominal asset update set property.vi" Type="VI" URL="../VIs/nominal asset update set property.vi"/>
 	<Item Name="nominal asset update.vi" Type="VI" URL="../VIs/nominal asset update.vi"/>
 	<Item Name="nominal asset url.vi" Type="VI" URL="../VIs/nominal asset url.vi"/>
+	<Item Name="nominal channel data source rid.vi" Type="VI" URL="../VIs/nominal channel data source rid.vi"/>
+	<Item Name="nominal channel data type.vi" Type="VI" URL="../VIs/nominal channel data type.vi"/>
+	<Item Name="nominal channel description.vi" Type="VI" URL="../VIs/nominal channel description.vi"/>
+	<Item Name="nominal channel free.vi" Type="VI" URL="../VIs/nominal channel free.vi"/>
+	<Item Name="nominal channel get.vi" Type="VI" URL="../VIs/nominal channel get.vi"/>
+	<Item Name="nominal channel list.vi" Type="VI" URL="../VIs/nominal channel list.vi"/>
+	<Item Name="nominal channel name.vi" Type="VI" URL="../VIs/nominal channel name.vi"/>
+	<Item Name="nominal channel search.vi" Type="VI" URL="../VIs/nominal channel search.vi"/>
+	<Item Name="nominal channel set metadata.vi" Type="VI" URL="../VIs/nominal channel set metadata.vi"/>
+	<Item Name="nominal channel unit.vi" Type="VI" URL="../VIs/nominal channel unit.vi"/>
 	<Item Name="nominal client base url.vi" Type="VI" URL="../VIs/nominal client base url.vi"/>
 	<Item Name="nominal client free.vi" Type="VI" URL="../VIs/nominal client free.vi"/>
 	<Item Name="nominal client new.vi" Type="VI" URL="../VIs/nominal client new.vi"/>
