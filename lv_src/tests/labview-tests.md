@@ -13,9 +13,9 @@ run. Status as of 2026-08-08:
 | 6. Video lifecycle | video VIs, /video/v1 endpoints | PASSED 2026-08-08 |
 | 7. Channel metadata | channel VIs, data-type enum, metadata upsert | PASSED 2026-08-08 |
 | 8. CSV ingest | file upload, ingest job polling, real data in a dataset | PASSED 2026-08-08 |
-| 9. Workbook from template | template get, workbook create/search/archive | NOT YET RUN |
-| 10. Who am I | user VIs, token identity probe | NOT YET RUN |
-| 11. Workspace discovery | workspace VIs, finding your workspace RID | NOT YET RUN |
+| 9. Workbook from template | template get, workbook create/search/archive | PASSED 2026-08-08 |
+| 10. Who am I | user VIs, token identity probe | PASSED 2026-08-08 |
+| 11. Workspace discovery | workspace VIs, finding your workspace RID | PASSED 2026-08-08 |
 
 Re-run all three after any re-import, and after any DLL change that touches
 signatures.

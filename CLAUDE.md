@@ -418,8 +418,10 @@ wire tier 3 into the default `test` recipe.
 2. Implement `runtime.rs`, `error.rs`, `strings.rs`, `handles.rs` (the shared
    infrastructure every resource module depends on).
 3. Implement **one full type end-to-end** — `client.rs` (connect/disconnect,
-   via `NominalClient::builder(token).workspace_rid(...).base_url(...).build()`,
-   NOT the profile-file path) + `asset.rs` (create/get/list/search/update/
+   via `NominalClient::builder(token).workspace_rid(...).base_url(...).build()`
+   as the primary path; `from_profile`/`from_profile_env` wrappers are a
+   sanctioned later addition — maintainer decision 2026-08-08 — as secondary
+   constructors, never the default) + `asset.rs` (create/get/list/search/update/
    archive/unarchive + all field getters) — with full tier-1+2 test coverage
    and a green CI run, including a real Import Shared Library test against
    the generated header.
@@ -457,8 +459,8 @@ this brief).
 - Ingest format structs: `CsvIngest`, `ParquetIngest`, `McapIngest`,
   `JournalJsonIngest`, `AvroStreamIngest`, `DataflashIngest`, `VideoIngest`
 - `core::Timestamp`
-- `config::Config`, `config::Profile` (profile-file path — not used by this
-  project's client construction, see Suggested Build Order step 3)
+- `config::Config`, `config::Profile` (profile-file path — secondary client
+  constructors only, see Suggested Build Order step 3)
 
 **Enums:**
 - `core::AssetQuery`, `core::RunQuery`, `core::DatasetQuery`, `core::VideoQuery`,

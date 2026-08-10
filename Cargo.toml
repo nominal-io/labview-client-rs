@@ -1,3 +1,11 @@
 [workspace]
 resolver = "2"
 members = ["crates/ffi"]
+
+# Size optimizations for the shipped DLLs/SO. NOTE: panic = "abort" must
+# NEVER be set here — every exported function relies on catch_unwind, which
+# requires unwinding panics.
+[profile.release]
+lto = true
+codegen-units = 1
+strip = "symbols"
