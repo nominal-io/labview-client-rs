@@ -17,15 +17,17 @@
 			<Item Name="scripting.vi" Type="VI" URL="../dev/scripting.vi"/>
 		</Item>
 		<Item Name="tests" Type="Folder">
-			<Item Name="1 - Offline client lifecycle.vi" Type="VI" URL="../tests/1 - Offline client lifecycle.vi"/>
-			<Item Name="2 - Real API list + loop.vi" Type="VI" URL="../tests/2 - Real API list + loop.vi"/>
-			<Item Name="3 - Staged create-verify-staged update-archive.vi" Type="VI" URL="../tests/3 - Staged create-verify-staged update-archive.vi"/>
-			<Item Name="4 - Run lifecycle.vi" Type="VI" URL="../tests/4 - Run lifecycle.vi"/>
-			<Item Name="5 - Dataset Lifecycle.vi" Type="VI" URL="../tests/5 - Dataset Lifecycle.vi"/>
-			<Item Name="6 - Video Lifecycle.vi" Type="VI" URL="../tests/6 - Video Lifecycle.vi"/>
-			<Item Name="7 - Channel metadata.vi" Type="VI" URL="../tests/7 - Channel metadata.vi"/>
-			<Item Name="8 - CSV Ingest.vi" Type="VI" URL="../tests/8 - CSV Ingest.vi"/>
-			<Item Name="9 - Workbook from template.vi" Type="VI" URL="../tests/9 - Workbook from template.vi"/>
+			<Item Name="01 - Offline client lifecycle.vi" Type="VI" URL="../tests/01 - Offline client lifecycle.vi"/>
+			<Item Name="02 - Real API list + loop.vi" Type="VI" URL="../tests/02 - Real API list + loop.vi"/>
+			<Item Name="03 - Staged create-verify-staged update-archive.vi" Type="VI" URL="../tests/03 - Staged create-verify-staged update-archive.vi"/>
+			<Item Name="04 - Run lifecycle.vi" Type="VI" URL="../tests/04 - Run lifecycle.vi"/>
+			<Item Name="05 - Dataset Lifecycle.vi" Type="VI" URL="../tests/05 - Dataset Lifecycle.vi"/>
+			<Item Name="06 - Video Lifecycle.vi" Type="VI" URL="../tests/06 - Video Lifecycle.vi"/>
+			<Item Name="07 - Channel metadata.vi" Type="VI" URL="../tests/07 - Channel metadata.vi"/>
+			<Item Name="08 - CSV Ingest.vi" Type="VI" URL="../tests/08 - CSV Ingest.vi"/>
+			<Item Name="09 - Workbook from template.vi" Type="VI" URL="../tests/09 - Workbook from template.vi"/>
+			<Item Name="10 - Who am I.vi" Type="VI" URL="../tests/10 - Who am I.vi"/>
+			<Item Name="11 - Workspace discovery.vi" Type="VI" URL="../tests/11 - Workspace discovery.vi"/>
 		</Item>
 		<Item Name="client.lvlib" Type="Library" URL="../client/client.lvlib"/>
 		<Item Name="Dependencies" Type="Dependencies">
