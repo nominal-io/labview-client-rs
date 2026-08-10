@@ -1274,6 +1274,61 @@ int32_t nominal_run_data_source_rid_at(int32_t run,
 int32_t nominal_run_data_source_type_at(int32_t run, int32_t index, int32_t *out_type);
 
 /*
+ Fetches the template with the given RID (latest commit on the main
+ branch), writing its handle to `out_template`. Free with
+ `nominal_template_free`.
+ */
+int32_t nominal_template_get(int32_t client, const char *rid, int32_t *out_template);
+
+/*
+ Frees a template handle. Freeing twice returns an error.
+ */
+int32_t nominal_template_free(int32_t template_);
+
+/*
+ Writes the template's RID into `buf`, storing the byte count needed in
+ `out_needed`.
+ */
+int32_t nominal_template_rid(int32_t template_, char *buf, uint32_t cap, uint32_t *out_needed);
+
+/*
+ Writes the template's title into `buf`, storing the byte count needed in
+ `out_needed`.
+ */
+int32_t nominal_template_title(int32_t template_, char *buf, uint32_t cap, uint32_t *out_needed);
+
+/*
+ Writes the template's description into `buf`, and whether one is set into
+ `is_present` (an absent description reports 0 bytes needed).
+ */
+int32_t nominal_template_description(int32_t template_,
+                                     char *buf,
+                                     uint32_t cap,
+                                     uint32_t *out_needed,
+                                     bool *is_present);
+
+/*
+ Writes the commit ID identifying this template version into `buf`,
+ storing the byte count needed in `out_needed`.
+ */
+int32_t nominal_template_commit_id(int32_t template_,
+                                   char *buf,
+                                   uint32_t cap,
+                                   uint32_t *out_needed);
+
+/*
+ Writes the URL for viewing this template in the Nominal web app into
+ `buf`, storing the byte count needed in `out_needed`.
+ */
+int32_t nominal_template_url(int32_t template_, char *buf, uint32_t cap, uint32_t *out_needed);
+
+/*
+ Writes the template's creation time to `out_millis` as `f64` Unix
+ milliseconds (UTC).
+ */
+int32_t nominal_template_created_at(int32_t template_, double *out_millis);
+
+/*
  Creates an empty video (metadata shell — the media file arrives via
  ingest) with the given name and optional description, writing the new
  video's handle to `out_video`. Free with `nominal_video_free`. For labels
@@ -1501,5 +1556,212 @@ int32_t nominal_video_label_at(int32_t video,
                                char *buf,
                                uint32_t cap,
                                uint32_t *out_needed);
+
+/*
+ Fetches the workbook with the given RID, writing its handle to
+ `out_workbook`. Free with `nominal_workbook_free`.
+ */
+int32_t nominal_workbook_get(int32_t client, const char *rid, int32_t *out_workbook);
+
+/*
+ Lists all workbooks (search with no filters), returning a handle list.
+
+ On success `*out_list` is a handle list of `*out_count` workbook handles —
+ read them with `nominal_handle_list_get` and free the list with
+ `nominal_handle_list_free`. Each workbook handle stays valid until passed
+ to `nominal_workbook_free`, independent of the list.
+ */
+int32_t nominal_workbook_list(int32_t client, int32_t *out_list, uint32_t *out_count);
+
+/*
+ Searches workbooks, returning a handle list (see `nominal_workbook_list`
+ for ownership).
+
+ Filters may each be null or empty ("no filter"); the ones provided are
+ combined with AND:
+ - `search_text`: fuzzy full-text match on title and description
+ - `label`: exact label match
+ - `property_key` + `property_value`: property match (both or neither)
+ - `asset_rid`: workbooks attached to this asset
+ - `run_rid`: workbooks attached to this run
+ */
+int32_t nominal_workbook_search(int32_t client,
+                                const char *search_text,
+                                const char *label,
+                                const char *property_key,
+                                const char *property_value,
+                                const char *asset_rid,
+                                const char *run_rid,
+                                int32_t *out_list,
+                                uint32_t *out_count);
+
+/*
+ Archives a workbook (hidden from the UI, not deleted).
+ */
+int32_t nominal_workbook_archive(int32_t client, const char *rid);
+
+/*
+ Unarchives a workbook, restoring its visibility in the UI.
+ */
+int32_t nominal_workbook_unarchive(int32_t client, const char *rid);
+
+/*
+ Frees a workbook handle. Freeing twice returns an error.
+ */
+int32_t nominal_workbook_free(int32_t workbook);
+
+/*
+ Starts staging a workbook-create request. Add at least one scope RID
+ (`nominal_workbook_create_add_scope_asset` or `_add_scope_run` — not
+ both), optionally override title/description (they default to the
+ template's), then fire it with `nominal_workbook_create_commit`. Free
+ with `nominal_workbook_create_free` (commit does not free).
+ */
+int32_t nominal_workbook_create_begin(int32_t *out_staging);
+
+/*
+ Sets the workbook's title (overrides the template's).
+ */
+int32_t nominal_workbook_create_set_title(int32_t staging, const char *title);
+
+/*
+ Sets the workbook's description (overrides the template's).
+ */
+int32_t nominal_workbook_create_set_description(int32_t staging, const char *description);
+
+/*
+ Adds one label to the staged create.
+ */
+int32_t nominal_workbook_create_add_label(int32_t staging, const char *label);
+
+/*
+ Sets one property on the staged create (same key overwrites).
+ */
+int32_t nominal_workbook_create_set_property(int32_t staging, const char *key, const char *value);
+
+/*
+ Adds an asset RID to the workbook's data scope. Mutually exclusive with
+ `nominal_workbook_create_add_scope_run`.
+ */
+int32_t nominal_workbook_create_add_scope_asset(int32_t staging, const char *asset_rid);
+
+/*
+ Adds a run RID to the workbook's data scope. Mutually exclusive with
+ `nominal_workbook_create_add_scope_asset`.
+ */
+int32_t nominal_workbook_create_add_scope_run(int32_t staging, const char *run_rid);
+
+/*
+ Creates the staged workbook from the given template (see
+ `nominal_template_get`), writing the new workbook's handle to
+ `out_workbook` (free with `nominal_workbook_free`). At least one scope
+ RID must have been staged. The staging handle stays valid — free it with
+ `nominal_workbook_create_free`.
+ */
+int32_t nominal_workbook_create_commit(int32_t client,
+                                       int32_t template_,
+                                       int32_t staging,
+                                       int32_t *out_workbook);
+
+/*
+ Frees a workbook-create staging handle. Freeing twice returns an error.
+ */
+int32_t nominal_workbook_create_free(int32_t staging);
+
+/*
+ Writes the workbook's RID into `buf`, storing the byte count needed in
+ `out_needed`.
+ */
+int32_t nominal_workbook_rid(int32_t workbook, char *buf, uint32_t cap, uint32_t *out_needed);
+
+/*
+ Writes the workbook's name into `buf`, storing the byte count needed in
+ `out_needed`.
+ */
+int32_t nominal_workbook_name(int32_t workbook, char *buf, uint32_t cap, uint32_t *out_needed);
+
+/*
+ Writes the workbook's description into `buf`, and whether one is set into
+ `is_present` (an absent description reports 0 bytes needed).
+ */
+int32_t nominal_workbook_description(int32_t workbook,
+                                     char *buf,
+                                     uint32_t cap,
+                                     uint32_t *out_needed,
+                                     bool *is_present);
+
+/*
+ Writes the URL for viewing this workbook in the Nominal web app into
+ `buf`, storing the byte count needed in `out_needed`.
+ */
+int32_t nominal_workbook_url(int32_t workbook, char *buf, uint32_t cap, uint32_t *out_needed);
+
+/*
+ Writes the workbook's creation time to `out_millis` as `f64` Unix
+ milliseconds (UTC).
+ */
+int32_t nominal_workbook_created_at(int32_t workbook, double *out_millis);
+
+/*
+ Stores whether the workbook's scope is assets (0) or runs (1) in
+ `out_type`, as a `NominalWorkbookScopeType` value.
+ */
+int32_t nominal_workbook_scope_type(int32_t workbook, int32_t *out_type);
+
+/*
+ Stores the number of RIDs in the workbook's data scope in `out_count`.
+ */
+int32_t nominal_workbook_scope_rid_count(int32_t workbook, uint32_t *out_count);
+
+/*
+ Writes the scope RID at `index` (0-based) into `buf`, storing the byte
+ count needed in `out_needed`. Whether they are asset or run RIDs is
+ reported by `nominal_workbook_scope_type`.
+ */
+int32_t nominal_workbook_scope_rid_at(int32_t workbook,
+                                      int32_t index,
+                                      char *buf,
+                                      uint32_t cap,
+                                      uint32_t *out_needed);
+
+/*
+ Stores the number of properties on the workbook in `out_count`.
+ */
+int32_t nominal_workbook_property_count(int32_t workbook, uint32_t *out_count);
+
+/*
+ Writes the key of the property at `index` (0-based, sorted-key order)
+ into `buf`, storing the byte count needed in `out_needed`.
+ */
+int32_t nominal_workbook_property_key_at(int32_t workbook,
+                                         int32_t index,
+                                         char *buf,
+                                         uint32_t cap,
+                                         uint32_t *out_needed);
+
+/*
+ Writes the value of the property at `index` (0-based, sorted-key order)
+ into `buf`, storing the byte count needed in `out_needed`.
+ */
+int32_t nominal_workbook_property_value_at(int32_t workbook,
+                                           int32_t index,
+                                           char *buf,
+                                           uint32_t cap,
+                                           uint32_t *out_needed);
+
+/*
+ Stores the number of labels on the workbook in `out_count`.
+ */
+int32_t nominal_workbook_label_count(int32_t workbook, uint32_t *out_count);
+
+/*
+ Writes the label at `index` (0-based) into `buf`, storing the byte count
+ needed in `out_needed`.
+ */
+int32_t nominal_workbook_label_at(int32_t workbook,
+                                  int32_t index,
+                                  char *buf,
+                                  uint32_t cap,
+                                  uint32_t *out_needed);
 
 #endif  /* NOMINAL_FFI_H */

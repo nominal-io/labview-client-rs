@@ -17,4 +17,6 @@ pub mod ingest;
 pub mod run;
 pub mod runtime;
 pub mod strings;
+pub mod template;
 pub mod video;
+pub mod workbook;

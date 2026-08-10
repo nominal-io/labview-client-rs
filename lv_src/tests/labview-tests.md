@@ -1,4 +1,4 @@
-# LabVIEW manual test plan — nominal FFI
+﻿# LabVIEW manual test plan — nominal FFI
 
 Manual smoke tests for the wizard-imported VIs, in the order they should be
 run. Status as of 2026-08-08:
@@ -12,7 +12,8 @@ run. Status as of 2026-08-08:
 | 5. Dataset lifecycle | dataset VIs, channel delimiter, catalog endpoints | PASSED 2026-08-08 |
 | 6. Video lifecycle | video VIs, /video/v1 endpoints | PASSED 2026-08-08 |
 | 7. Channel metadata | channel VIs, data-type enum, metadata upsert | PASSED 2026-08-08 |
-| 8. CSV ingest | file upload, ingest job polling, real data in a dataset | NOT YET RUN |
+| 8. CSV ingest | file upload, ingest job polling, real data in a dataset | PASSED 2026-08-08 |
+| 9. Workbook from template | template get, workbook create/search/archive | NOT YET RUN |
 
 Re-run all three after any re-import, and after any DLL change that touches
 signatures.
@@ -327,3 +328,30 @@ Job status (`NominalIngestJobStatus` I32): 0=Submitted 1=Queued
 10. Cleanup: free the job handles, staging, dataset handle; DON'T archive
     the dataset if you want to look at the data first. `nominal client
     free.vi`.
+
+## Test 9 — Workbook from template (NOT YET RUN)
+
+Requires an existing TEMPLATE in the workspace (create one in the Nominal
+app: Workbooks -> Templates, or use any you already have) — grab its RID
+from the app URL. Also reuse a real asset RID (e.g. from Test 3's asset
+before archiving, or any real asset).
+
+1. `nominal client new.vi` — real token.
+2. `nominal template get.vi` — template RID → template handle. Verify
+   `template title` / `template commit id` are non-empty.
+3. `nominal workbook create begin.vi` → staging.
+4. `nominal workbook create set title.vi` — `labview-ffi-workbook-1`
+   (optional — defaults to the template's title).
+5. `nominal workbook create add scope asset.vi` — a real asset RID.
+   (Assets and runs are mutually exclusive — adding a scope run now would
+   return error 5.)
+6. `nominal workbook create commit.vi` — client, template handle, staging
+   → workbook handle. `nominal workbook create free.vi`.
+7. Verify: `workbook name` = your title; `workbook scope type` = 0
+   (Assets); `workbook scope rid count` = 1; `workbook scope rid at` 0 =
+   the asset RID; `workbook url` — open it in the browser and see the
+   workbook rendered from the template.
+8. `nominal workbook search.vi` — asset_rid = the same RID, other filters
+   empty → your workbook among the results.
+9. Cleanup: `nominal workbook archive.vi` (client + workbook RID), free
+   workbook + template handles, `nominal client free.vi`.
