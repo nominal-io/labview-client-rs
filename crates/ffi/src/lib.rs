@@ -13,6 +13,7 @@ pub mod client;
 pub mod dataset;
 pub mod error;
 pub mod handles;
+pub mod ingest;
 pub mod run;
 pub mod runtime;
 pub mod strings;

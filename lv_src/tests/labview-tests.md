@@ -11,7 +11,8 @@ run. Status as of 2026-08-08:
 | 4. Run lifecycle | run VIs, f64 timestamps, run-number search, asset link | PASSED 2026-08-08 |
 | 5. Dataset lifecycle | dataset VIs, channel delimiter, catalog endpoints | PASSED 2026-08-08 |
 | 6. Video lifecycle | video VIs, /video/v1 endpoints | PASSED 2026-08-08 |
-| 7. Channel metadata | channel VIs, data-type enum, metadata upsert | NOT YET RUN |
+| 7. Channel metadata | channel VIs, data-type enum, metadata upsert | PASSED 2026-08-08 |
+| 8. CSV ingest | file upload, ingest job polling, real data in a dataset | NOT YET RUN |
 
 Re-run all three after any re-import, and after any DLL change that touches
 signatures.
@@ -253,7 +254,7 @@ and no timestamps beyond created-at.
     `nominal video free.vi` on both video handles;
     `nominal client free.vi`.
 
-## Test 7 — Channel metadata (NOT YET RUN)
+## Test 7 — Channel metadata (PASSED 2026-08-08)
 
 Channels have no create/archive lifecycle — they exist on data sources, and
 their metadata can be seeded via the upsert even before data arrives. This
@@ -282,3 +283,47 @@ The `data_type` parameter is a `NominalChannelDataType` I32:
    or may not appear in search results — don't treat that as a failure.)
 7. Cleanup: `nominal dataset archive.vi`, `nominal dataset free.vi`,
    `nominal client free.vi`.
+
+## Test 8 — CSV ingest (NOT YET RUN)
+
+The payoff test: real data lands in a dataset you can open in the Nominal
+app. Prepare a small CSV on disk first, e.g. C:\temp\labview-ffi-test.csv:
+
+    time,temperature,pressure
+    1723200000,20.5,101.2
+    1723200001,21.0,101.3
+    1723200002,21.5,101.1
+
+(times are epoch-seconds — any recent values work)
+
+The `time_unit` parameter is a `NominalTimeUnit` I32: 0=Nanoseconds
+1=Microseconds 2=Milliseconds 3=Seconds 4=Minutes 5=Hours 6=Days.
+Job status (`NominalIngestJobStatus` I32): 0=Submitted 1=Queued
+2=InProgress 3=Completed 4=Failed 5=Cancelled 6=Unknown.
+
+1. `nominal client new.vi` — real token.
+2. `nominal dataset create.vi` — name `labview-ffi-ingest-test` → RID on a
+   wire (keep the handle too).
+3. `nominal ingest tabular begin.vi` → staging.
+4. `nominal ingest tabular set timestamp epoch.vi` — staging, column
+   `time`, time_unit 3 (Seconds).
+5. Optional: `nominal ingest tabular add file tag.vi` — tag `source`,
+   value `labview`.
+6. `nominal ingest csv.vi` — client, staging, the CSV path, the dataset
+   RID → job handle. NOTE: blocks for the upload duration (small file ≈
+   a second or two).
+7. On the job handle: `ingest job rid` (keep on a wire), `ingest job
+   status` (likely 0-2), `ingest job result rid` — is_present true, equals
+   the dataset RID.
+8. `nominal ingest job wait.vi` — client, job RID, poll_interval_ms 0
+   (default 2s) → new handle. BLOCKS until the server finishes ingesting
+   (typically well under a minute for three rows). `ingest job status` on
+   the new handle = 3 (Completed). A failed job is status 4 here, not an
+   FFI error.
+9. Verify the payoff: `nominal channel list.vi` with the dataset RID →
+   expect channels `temperature` and `pressure` (the `time` column is
+   consumed as the timestamp). Or open the dataset URL in the app and see
+   the data.
+10. Cleanup: free the job handles, staging, dataset handle; DON'T archive
+    the dataset if you want to look at the data first. `nominal client
+    free.vi`.

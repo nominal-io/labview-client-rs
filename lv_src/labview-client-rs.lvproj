@@ -24,6 +24,7 @@
 			<Item Name="5 - Dataset Lifecycle.vi" Type="VI" URL="../tests/5 - Dataset Lifecycle.vi"/>
 			<Item Name="6 - Video Lifecycle.vi" Type="VI" URL="../tests/6 - Video Lifecycle.vi"/>
 			<Item Name="7 - Channel metadata.vi" Type="VI" URL="../tests/7 - Channel metadata.vi"/>
+			<Item Name="8 - CSV Ingest.vi" Type="VI" URL="../tests/8 - CSV Ingest.vi"/>
 		</Item>
 		<Item Name="client.lvlib" Type="Library" URL="../client/client.lvlib"/>
 		<Item Name="Dependencies" Type="Dependencies">
@@ -66,6 +67,7 @@
 				<Item Name="Application Directory.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/file.llb/Application Directory.vi"/>
 				<Item Name="NI_FileType.lvlib" Type="Library" URL="/&lt;vilib&gt;/Utility/lvfile.llb/NI_FileType.lvlib"/>
 			</Item>
+			<Item Name="nominalClient_64.dll" Type="Document" URL="../bin/nominalClient_64.dll"/>
 		</Item>
 		<Item Name="Build Specifications" Type="Build"/>
 	</Item>

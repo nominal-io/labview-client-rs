@@ -799,6 +799,157 @@ int32_t nominal_handle_list_get(int32_t list, int32_t index, int32_t *out_handle
 int32_t nominal_handle_list_free(int32_t list);
 
 /*
+ Starts staging options for a CSV or Parquet ingest. Set the (required)
+ timestamp spec with one of the `nominal_ingest_tabular_set_timestamp_*`
+ calls, add optional settings, then fire it with `nominal_ingest_csv` or
+ `nominal_ingest_parquet`. Free with `nominal_ingest_tabular_free` (the
+ ingest calls do not free, so one staging handle can serve several files).
+ */
+int32_t nominal_ingest_tabular_begin(int32_t *out_staging);
+
+/*
+ Timestamps are ISO 8601 strings in the named column.
+ */
+int32_t nominal_ingest_tabular_set_timestamp_iso8601(int32_t staging, const char *column);
+
+/*
+ Timestamps are numeric epochs in the named column, in the given
+ `NominalTimeUnit` (e.g. epoch-seconds).
+ */
+int32_t nominal_ingest_tabular_set_timestamp_epoch(int32_t staging,
+                                                   const char *column,
+                                                   int32_t time_unit);
+
+/*
+ Timestamps use a custom format string (Java `DateTimeFormatter` syntax)
+ in the named column. `default_year` / `default_day_of_year` fill in
+ missing date parts for formats like IRIG; pass 0 to leave unset.
+ */
+int32_t nominal_ingest_tabular_set_timestamp_custom(int32_t staging,
+                                                    const char *column,
+                                                    const char *format,
+                                                    int32_t default_year,
+                                                    int32_t default_day_of_year);
+
+/*
+ Timestamps are numeric offsets in the named column, in the given
+ `NominalTimeUnit`, relative to a start time. `offset_ms` (`f64` Unix
+ milliseconds, with `has_offset` true) anchors the offsets — required when
+ ingesting into an existing dataset.
+ */
+int32_t nominal_ingest_tabular_set_timestamp_relative(int32_t staging,
+                                                      const char *column,
+                                                      int32_t time_unit,
+                                                      double offset_ms,
+                                                      bool has_offset);
+
+/*
+ Prefixes every channel name in the file with the given string.
+ */
+int32_t nominal_ingest_tabular_set_channel_prefix(int32_t staging, const char *prefix);
+
+/*
+ Derives the given tag's value from the named column (repeatable).
+ */
+int32_t nominal_ingest_tabular_add_tag_column(int32_t staging, const char *tag, const char *column);
+
+/*
+ Applies a fixed tag value to every row in the file (repeatable).
+ */
+int32_t nominal_ingest_tabular_add_file_tag(int32_t staging, const char *tag, const char *value);
+
+/*
+ Excludes the named column from ingestion (repeatable).
+ */
+int32_t nominal_ingest_tabular_exclude_column(int32_t staging, const char *column);
+
+/*
+ Marks the file as an archive (.tar, .tar.gz, .zip) whose .parquet entries
+ will be extracted and ingested. Parquet only — `nominal_ingest_csv`
+ rejects a staging handle with this set.
+ */
+int32_t nominal_ingest_tabular_set_is_archive(int32_t staging, bool is_archive);
+
+/*
+ Frees a tabular-ingest staging handle. Freeing twice returns an error.
+ */
+int32_t nominal_ingest_tabular_free(int32_t staging);
+
+/*
+ Uploads a CSV file (`.csv` / `.csv.gz`) and ingests it into the existing
+ dataset with the given RID, using the staged options (a timestamp spec is
+ required). Blocks until the upload completes and the server accepts the
+ ingest — the ingest itself continues server-side. Writes a job handle to
+ `out_job`; poll it with `nominal_ingest_job_get`/`_wait`, read the target
+ dataset back with `nominal_ingest_job_result_rid`, and free it with
+ `nominal_ingest_job_free`. The staging handle stays valid for reuse.
+ */
+int32_t nominal_ingest_csv(int32_t client,
+                           int32_t staging,
+                           const char *file_path,
+                           const char *dataset_rid,
+                           int32_t *out_job);
+
+/*
+ Uploads a Parquet file (or archive of Parquet files — see
+ `nominal_ingest_tabular_set_is_archive`) and ingests it into the existing
+ dataset with the given RID. Otherwise identical to `nominal_ingest_csv`.
+ */
+int32_t nominal_ingest_parquet(int32_t client,
+                               int32_t staging,
+                               const char *file_path,
+                               const char *dataset_rid,
+                               int32_t *out_job);
+
+/*
+ Fetches the current state of the ingest job with the given RID, writing a
+ job handle to `out_job` (free with `nominal_ingest_job_free`).
+ */
+int32_t nominal_ingest_job_get(int32_t client, const char *rid, int32_t *out_job);
+
+/*
+ Polls the ingest job with the given RID until it reaches a terminal state
+ (Completed, Failed, Cancelled, or Unknown), then writes a job handle to
+ `out_job`. BLOCKS the calling thread for as long as the job runs. A
+ terminal-but-unsuccessful job is NOT an error here — check
+ `nominal_ingest_job_status` on the returned handle. `poll_interval_ms`
+ <= 0 uses the default (2000 ms).
+ */
+int32_t nominal_ingest_job_wait(int32_t client,
+                                const char *rid,
+                                double poll_interval_ms,
+                                int32_t *out_job);
+
+/*
+ Writes the ingest job's RID into `buf`, storing the byte count needed in
+ `out_needed`.
+ */
+int32_t nominal_ingest_job_rid(int32_t job, char *buf, uint32_t cap, uint32_t *out_needed);
+
+/*
+ Stores the job's status in `out_status` as a `NominalIngestJobStatus`
+ value. This is a snapshot from when the handle was created — re-fetch
+ with `nominal_ingest_job_get` for fresh state.
+ */
+int32_t nominal_ingest_job_status(int32_t job, int32_t *out_status);
+
+/*
+ Writes the RID of the dataset (or video) the ingest landed in into `buf`,
+ and whether it is known into `is_present`. Only handles returned by the
+ upload functions carry this; handles from `_get`/`_wait` report absent.
+ */
+int32_t nominal_ingest_job_result_rid(int32_t job,
+                                      char *buf,
+                                      uint32_t cap,
+                                      uint32_t *out_needed,
+                                      bool *is_present);
+
+/*
+ Frees an ingest-job handle. Freeing twice returns an error.
+ */
+int32_t nominal_ingest_job_free(int32_t job);
+
+/*
  Creates a run with a name, start time (`f64` Unix milliseconds), optional
  description (null or empty = none), and optional end time (`has_end`
  false = still running / no end). Writes the new run's handle to
