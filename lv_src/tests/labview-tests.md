@@ -17,6 +17,8 @@ run. Status as of 2026-08-08:
 | 10. Who am I | user VIs, token identity probe | PASSED 2026-08-08 |
 | 11. Workspace discovery | workspace VIs, finding your workspace RID | PASSED 2026-08-08 |
 | 12. Data-source attach | asset/run attach VIs, series-tag staging, scope-name conflict | NOT YET RUN |
+| 13. MCAP ingest | mcap staging VIs, topic filters, non-tabular job flow | NOT YET RUN |
+| 14. Video ingest | video upload VI, f64 start time, video-RID job result | NOT YET RUN |
 
 Re-run all three after any re-import, and after any DLL change that touches
 signatures.
@@ -451,3 +453,56 @@ Cleanup:
 11. Free every handle: both extra asset handles from steps 5/7, the run
     handle from step 9, the originals from setup, then
     `nominal client free.vi`.
+
+## Test 13 — MCAP ingest (NOT YET RUN)
+
+Same job flow as Test 8, new staging surface. Requires a real `.mcap` file
+containing protobuf timeseries topics (any small robotics log works — note
+one or two of its topic names before starting). journald JSON
+(`nominal ingest journal json.vi`), Avro-stream
+(`nominal ingest avro stream.vi`), and DataFlash
+(`nominal ingest dataflash begin/add file tag/free.vi` +
+`nominal ingest dataflash.vi`) reuse this exact job flow with smaller option
+surfaces — the automated suite covers their wire shapes; spot check them in
+LabVIEW only if you have real files of those formats handy.
+
+1. `nominal client new.vi` — real token.
+2. `nominal dataset create.vi` — name `labview-ffi-mcap-test` → RID on a
+   wire.
+3. `nominal ingest mcap begin.vi` → staging.
+4. `nominal ingest mcap include topic.vi` — one real topic name from your
+   file. (Include and exclude are mutually exclusive — staging both makes
+   the ingest call return error 5 before uploading anything.)
+5. Optional: `nominal ingest mcap add file tag.vi` — tag `source`, value
+   `labview`; `nominal ingest mcap set ignore invalid topics.vi` — true.
+6. `nominal ingest mcap.vi` — client, staging, the MCAP path, the dataset
+   RID → job handle. Blocks for the upload (MCAPs are bigger than test
+   CSVs — expect seconds to minutes).
+7. `nominal ingest job wait.vi` — job RID, poll_interval_ms 0 → status 3
+   (Completed). MCAP processing takes longer server-side than CSV.
+8. Verify: `nominal channel list.vi` with the dataset RID → channels from
+   the included topic only (the filter is the point of this test).
+9. Cleanup: free job handles + staging (`nominal ingest mcap free.vi`),
+   dataset handle; `nominal client free.vi`.
+
+## Test 14 — Video ingest (NOT YET RUN)
+
+The video upload lands in a VIDEO resource, not a dataset — the payoff is a
+playable clip in the app. Any short `.mp4` on disk works.
+
+1. `nominal client new.vi` — real token.
+2. `nominal video create.vi` — name `labview-ffi-video-ingest` → video RID
+   on a wire (keep the handle).
+3. `nominal ingest video.vi` — client, the mp4 path, the video RID,
+   start_ms = NowMs (or any recent timestamp — it anchors the first frame
+   on the timeline) → job handle. Blocks for the upload.
+4. On the job handle: `ingest job result rid` — is_present true, equals the
+   video RID (video jobs report the VIDEO rid here, not a dataset).
+5. `nominal ingest job wait.vi` — poll to status 3 (Completed).
+6. Payoff: `nominal video url.vi` on a fresh `nominal video get.vi` handle
+   → open in the browser → the clip plays, positioned at start_ms.
+7. (`nominal ingest video mcap.vi` is the same shape with a topic string
+   instead of start_ms — needs an MCAP with a video stream; skip unless you
+   have one.)
+8. Cleanup: free job + both video handles; archive the video only after
+   you've looked at it. `nominal client free.vi`.

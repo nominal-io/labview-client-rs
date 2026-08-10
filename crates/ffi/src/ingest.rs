@@ -1,15 +1,22 @@
-//! `nominal_ingest_*` — mirrors `nominal::core::ingest` for tabular files.
+//! `nominal_ingest_*` — mirrors `nominal::core::ingest`.
 //!
-//! This module covers the workhorse path: upload a CSV or Parquet file from
-//! disk into an existing dataset, then track the server-side ingest job.
-//! (The other upstream formats — MCAP, video, DataFlash, Avro-stream,
-//! journald JSON — follow the same pattern and are not wired up yet.)
+//! Upload a file from disk into an existing dataset (or, for video, an
+//! existing video resource), then track the server-side ingest job. Every
+//! upstream file format is wired up:
 //!
-//! CSV and Parquet share one option surface, so they share one staging
-//! handle: `nominal_ingest_tabular_begin`, the `_set_*`/`_add_*` calls, then
-//! either `nominal_ingest_csv` or `nominal_ingest_parquet` to upload+ingest.
-//! A timestamp spec (which column holds time, and how it's encoded) is
-//! required before committing.
+//! - CSV + Parquet share one option surface, so they share one staging
+//!   handle: `nominal_ingest_tabular_begin`, the `_set_*`/`_add_*` calls,
+//!   then either `nominal_ingest_csv` or `nominal_ingest_parquet`. A
+//!   timestamp spec (which column holds time, and how it's encoded) is
+//!   required before committing.
+//! - MCAP protobuf timeseries: `nominal_ingest_mcap_begin` staging (topic
+//!   include/exclude filters, file tags) + `nominal_ingest_mcap`.
+//! - ArduPilot DataFlash: `nominal_ingest_dataflash_begin` staging (file
+//!   tags only) + `nominal_ingest_dataflash`.
+//! - journald JSON and Nominal Avro-stream have no collection options —
+//!   flat one-call `nominal_ingest_journal_json` / `nominal_ingest_avro_stream`.
+//! - Video: flat `nominal_ingest_video` (standalone file + start time) or
+//!   `nominal_ingest_video_mcap` (one stream out of an MCAP, by topic).
 //!
 //! Uploads block the calling thread for the duration (multipart upload with
 //! sane defaults: 64 MiB parts, 8 concurrent, 3 retries). The upstream
@@ -22,13 +29,16 @@ use std::os::raw::c_char;
 use std::sync::Mutex;
 
 use chrono::{DateTime, Utc};
-use nominal::core::{CsvIngest, IngestJob, IngestJobStatus, ParquetIngest, TimeUnit, Timestamp};
+use nominal::core::{
+    AvroStreamIngest, CsvIngest, DataflashIngest, IngestJob, IngestJobStatus, JournalJsonIngest,
+    McapIngest, ParquetIngest, TimeUnit, Timestamp, VideoIngest,
+};
 
 use crate::client::ClientHandle;
 use crate::error::{fail, fail_sdk, guard, NominalErrorCode};
 use crate::handles::{handle_registry, lookup_handle};
 use crate::runtime::block_on;
-use crate::strings::{read_required_str, write_opt_str_field, write_str_field};
+use crate::strings::{read_optional_str, read_required_str, write_opt_str_field, write_str_field};
 
 /// The lifecycle status of an ingest job, as reported by
 /// `nominal_ingest_job_status`. Completed/Failed/Cancelled/Unknown are
@@ -590,6 +600,572 @@ pub extern "C" fn nominal_ingest_parquet(
                 .ingest()
                 .upload_parquet(&file_path, dataset_rid.as_str(), ingest),
         ) {
+            Ok((job, rid)) => {
+                let handle = IngestJobHandle::insert(FfiIngestJob {
+                    job,
+                    result_rid: Some(rid),
+                });
+                // SAFETY: out_job checked non-null above; caller owns it.
+                unsafe { *out_job = handle };
+                0
+            }
+            Err(err) => fail_sdk(err),
+        }
+    })
+}
+
+// ---------------------------------------------------------------------------
+// MCAP ingest staging
+// ---------------------------------------------------------------------------
+
+/// Accumulated options for an MCAP protobuf-timeseries ingest.
+pub(crate) struct McapIngestParams {
+    include_topics: Vec<String>,
+    exclude_topics: Vec<String>,
+    file_tags: BTreeMap<String, String>,
+    ignore_invalid_topics: Option<bool>,
+}
+
+handle_registry!(McapIngestStagingHandle, Mutex<McapIngestParams>);
+
+/// Starts staging options for an MCAP ingest. All options are optional — an
+/// untouched staging handle ingests every topic. Fire it with
+/// `nominal_ingest_mcap`; free with `nominal_ingest_mcap_free` (the ingest
+/// call does not free, so one staging handle can serve several files).
+#[no_mangle]
+pub extern "C" fn nominal_ingest_mcap_begin(out_staging: *mut i32) -> i32 {
+    guard(|| {
+        if out_staging.is_null() {
+            return fail(
+                NominalErrorCode::NullArgument,
+                "out_staging must not be null",
+            );
+        }
+        let params = McapIngestParams {
+            include_topics: Vec::new(),
+            exclude_topics: Vec::new(),
+            file_tags: BTreeMap::new(),
+            ignore_invalid_topics: None,
+        };
+        // SAFETY: out_staging checked non-null above; caller owns it.
+        unsafe { *out_staging = McapIngestStagingHandle::insert(Mutex::new(params)) };
+        0
+    })
+}
+
+/// Ingests only the given topic (repeatable). Mutually exclusive with
+/// `nominal_ingest_mcap_exclude_topic` — setting both fails at ingest time.
+#[no_mangle]
+pub extern "C" fn nominal_ingest_mcap_include_topic(staging: i32, topic: *const c_char) -> i32 {
+    guard(|| {
+        let staging = lookup_handle!(McapIngestStagingHandle, staging);
+        let topic = match read_required_str(topic, "topic") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if topic.is_empty() {
+            return fail(NominalErrorCode::InvalidArgument, "topic must not be empty");
+        }
+        staging
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .include_topics
+            .push(topic);
+        0
+    })
+}
+
+/// Skips the given topic during ingest (repeatable). Mutually exclusive with
+/// `nominal_ingest_mcap_include_topic` — setting both fails at ingest time.
+#[no_mangle]
+pub extern "C" fn nominal_ingest_mcap_exclude_topic(staging: i32, topic: *const c_char) -> i32 {
+    guard(|| {
+        let staging = lookup_handle!(McapIngestStagingHandle, staging);
+        let topic = match read_required_str(topic, "topic") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if topic.is_empty() {
+            return fail(NominalErrorCode::InvalidArgument, "topic must not be empty");
+        }
+        staging
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .exclude_topics
+            .push(topic);
+        0
+    })
+}
+
+/// Applies a fixed tag value to every row in the file (repeatable).
+#[no_mangle]
+pub extern "C" fn nominal_ingest_mcap_add_file_tag(
+    staging: i32,
+    tag: *const c_char,
+    value: *const c_char,
+) -> i32 {
+    guard(|| {
+        let staging = lookup_handle!(McapIngestStagingHandle, staging);
+        let tag = match read_required_str(tag, "tag") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if tag.is_empty() {
+            return fail(NominalErrorCode::InvalidArgument, "tag must not be empty");
+        }
+        let value = match read_required_str(value, "value") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        staging
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .file_tags
+            .insert(tag, value);
+        0
+    })
+}
+
+/// If true, invalid MCAP topics are skipped instead of failing the whole
+/// ingest (defaults to the server-side default, false).
+#[no_mangle]
+pub extern "C" fn nominal_ingest_mcap_set_ignore_invalid_topics(staging: i32, ignore: bool) -> i32 {
+    guard(|| {
+        let staging = lookup_handle!(McapIngestStagingHandle, staging);
+        staging
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .ignore_invalid_topics = Some(ignore);
+        0
+    })
+}
+
+/// Frees an MCAP-ingest staging handle. Freeing twice returns an error.
+#[no_mangle]
+pub extern "C" fn nominal_ingest_mcap_free(staging: i32) -> i32 {
+    guard(|| {
+        if McapIngestStagingHandle::remove(staging) {
+            0
+        } else {
+            fail(
+                NominalErrorCode::InvalidHandle,
+                format!("invalid mcap-ingest staging handle: {staging}"),
+            )
+        }
+    })
+}
+
+/// Uploads an MCAP file and ingests its protobuf timeseries data into the
+/// existing dataset with the given RID, using the staged options. Blocks
+/// until the upload completes and the server accepts the ingest. Writes a
+/// job handle to `out_job` (see `nominal_ingest_csv` for the job-handle
+/// contract). The staging handle stays valid for reuse.
+#[no_mangle]
+pub extern "C" fn nominal_ingest_mcap(
+    client: i32,
+    staging: i32,
+    file_path: *const c_char,
+    dataset_rid: *const c_char,
+    out_job: *mut i32,
+) -> i32 {
+    guard(|| {
+        let client = lookup_handle!(ClientHandle, client);
+        let staging = lookup_handle!(McapIngestStagingHandle, staging);
+        let file_path = match read_required_str(file_path, "file_path") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        let dataset_rid = match read_required_str(dataset_rid, "dataset_rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if out_job.is_null() {
+            return fail(NominalErrorCode::NullArgument, "out_job must not be null");
+        }
+
+        let (include_topics, exclude_topics, file_tags, ignore_invalid) = {
+            let params = staging
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            (
+                params.include_topics.clone(),
+                params.exclude_topics.clone(),
+                params.file_tags.clone(),
+                params.ignore_invalid_topics,
+            )
+        };
+        // Upstream rejects this combination too, but only after the file has
+        // already been uploaded — catching it here saves the wasted upload.
+        if !include_topics.is_empty() && !exclude_topics.is_empty() {
+            return fail(
+                NominalErrorCode::InvalidArgument,
+                "include_topic and exclude_topic are mutually exclusive",
+            );
+        }
+
+        let mut ingest = McapIngest::new();
+        for topic in include_topics {
+            ingest = ingest.include_topic(topic);
+        }
+        for topic in exclude_topics {
+            ingest = ingest.exclude_topic(topic);
+        }
+        for (tag, value) in file_tags {
+            ingest = ingest.additional_file_tag(tag, value);
+        }
+        if let Some(ignore) = ignore_invalid {
+            ingest = ingest.ignore_invalid_topics(ignore);
+        }
+
+        match block_on(
+            client
+                .ingest()
+                .upload_mcap(&file_path, dataset_rid.as_str(), ingest),
+        ) {
+            Ok((job, rid)) => {
+                let handle = IngestJobHandle::insert(FfiIngestJob {
+                    job,
+                    result_rid: Some(rid),
+                });
+                // SAFETY: out_job checked non-null above; caller owns it.
+                unsafe { *out_job = handle };
+                0
+            }
+            Err(err) => fail_sdk(err),
+        }
+    })
+}
+
+// ---------------------------------------------------------------------------
+// DataFlash ingest staging
+// ---------------------------------------------------------------------------
+
+/// Accumulated options for an ArduPilot DataFlash ingest (file tags only).
+pub(crate) struct DataflashIngestParams {
+    file_tags: BTreeMap<String, String>,
+}
+
+handle_registry!(DataflashIngestStagingHandle, Mutex<DataflashIngestParams>);
+
+/// Starts staging options for an ArduPilot DataFlash (`.bin`) ingest. File
+/// tags are the only option — an untouched staging handle is valid. Fire it
+/// with `nominal_ingest_dataflash`; free with
+/// `nominal_ingest_dataflash_free`.
+#[no_mangle]
+pub extern "C" fn nominal_ingest_dataflash_begin(out_staging: *mut i32) -> i32 {
+    guard(|| {
+        if out_staging.is_null() {
+            return fail(
+                NominalErrorCode::NullArgument,
+                "out_staging must not be null",
+            );
+        }
+        let params = DataflashIngestParams {
+            file_tags: BTreeMap::new(),
+        };
+        // SAFETY: out_staging checked non-null above; caller owns it.
+        unsafe { *out_staging = DataflashIngestStagingHandle::insert(Mutex::new(params)) };
+        0
+    })
+}
+
+/// Applies a fixed tag value to every row in the file (repeatable).
+#[no_mangle]
+pub extern "C" fn nominal_ingest_dataflash_add_file_tag(
+    staging: i32,
+    tag: *const c_char,
+    value: *const c_char,
+) -> i32 {
+    guard(|| {
+        let staging = lookup_handle!(DataflashIngestStagingHandle, staging);
+        let tag = match read_required_str(tag, "tag") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if tag.is_empty() {
+            return fail(NominalErrorCode::InvalidArgument, "tag must not be empty");
+        }
+        let value = match read_required_str(value, "value") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        staging
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .file_tags
+            .insert(tag, value);
+        0
+    })
+}
+
+/// Frees a DataFlash-ingest staging handle. Freeing twice returns an error.
+#[no_mangle]
+pub extern "C" fn nominal_ingest_dataflash_free(staging: i32) -> i32 {
+    guard(|| {
+        if DataflashIngestStagingHandle::remove(staging) {
+            0
+        } else {
+            fail(
+                NominalErrorCode::InvalidHandle,
+                format!("invalid dataflash-ingest staging handle: {staging}"),
+            )
+        }
+    })
+}
+
+/// Uploads an ArduPilot DataFlash (`.bin`) file and ingests it into the
+/// existing dataset with the given RID, using the staged file tags. Blocks
+/// until the upload completes and the server accepts the ingest. Writes a
+/// job handle to `out_job` (see `nominal_ingest_csv` for the job-handle
+/// contract). The staging handle stays valid for reuse.
+#[no_mangle]
+pub extern "C" fn nominal_ingest_dataflash(
+    client: i32,
+    staging: i32,
+    file_path: *const c_char,
+    dataset_rid: *const c_char,
+    out_job: *mut i32,
+) -> i32 {
+    guard(|| {
+        let client = lookup_handle!(ClientHandle, client);
+        let staging = lookup_handle!(DataflashIngestStagingHandle, staging);
+        let file_path = match read_required_str(file_path, "file_path") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        let dataset_rid = match read_required_str(dataset_rid, "dataset_rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if out_job.is_null() {
+            return fail(NominalErrorCode::NullArgument, "out_job must not be null");
+        }
+
+        let file_tags = staging
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .file_tags
+            .clone();
+        let mut ingest = DataflashIngest::new();
+        for (tag, value) in file_tags {
+            ingest = ingest.additional_file_tag(tag, value);
+        }
+
+        match block_on(client.ingest().upload_ardupilot_dataflash(
+            &file_path,
+            dataset_rid.as_str(),
+            ingest,
+        )) {
+            Ok((job, rid)) => {
+                let handle = IngestJobHandle::insert(FfiIngestJob {
+                    job,
+                    result_rid: Some(rid),
+                });
+                // SAFETY: out_job checked non-null above; caller owns it.
+                unsafe { *out_job = handle };
+                0
+            }
+            Err(err) => fail_sdk(err),
+        }
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Flat single-call ingests (no collection options, so no staging handle)
+// ---------------------------------------------------------------------------
+
+/// Uploads a journald JSON file (`.jsonl` / `.jsonl.gz`) and ingests it into
+/// the existing dataset with the given RID. `channel` names the channel the
+/// log lines land in (null or empty = the server default, `logs`). Blocks
+/// until the upload completes and the server accepts the ingest. Writes a
+/// job handle to `out_job` (see `nominal_ingest_csv` for the job-handle
+/// contract).
+#[no_mangle]
+pub extern "C" fn nominal_ingest_journal_json(
+    client: i32,
+    file_path: *const c_char,
+    dataset_rid: *const c_char,
+    channel: *const c_char,
+    out_job: *mut i32,
+) -> i32 {
+    guard(|| {
+        let client = lookup_handle!(ClientHandle, client);
+        let file_path = match read_required_str(file_path, "file_path") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        let dataset_rid = match read_required_str(dataset_rid, "dataset_rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        let channel = match read_optional_str(channel, "channel") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if out_job.is_null() {
+            return fail(NominalErrorCode::NullArgument, "out_job must not be null");
+        }
+
+        let mut ingest = JournalJsonIngest::new();
+        if let Some(channel) = channel {
+            ingest = ingest.channel(channel);
+        }
+
+        match block_on(client.ingest().upload_journal_json(
+            &file_path,
+            dataset_rid.as_str(),
+            ingest,
+        )) {
+            Ok((job, rid)) => {
+                let handle = IngestJobHandle::insert(FfiIngestJob {
+                    job,
+                    result_rid: Some(rid),
+                });
+                // SAFETY: out_job checked non-null above; caller owns it.
+                unsafe { *out_job = handle };
+                0
+            }
+            Err(err) => fail_sdk(err),
+        }
+    })
+}
+
+/// Uploads a Nominal Avro-stream (`.avro`) file and ingests it into the
+/// existing dataset with the given RID. The Avro record schema is fixed
+/// server-side; there are no options. Blocks until the upload completes and
+/// the server accepts the ingest. Writes a job handle to `out_job` (see
+/// `nominal_ingest_csv` for the job-handle contract).
+#[no_mangle]
+pub extern "C" fn nominal_ingest_avro_stream(
+    client: i32,
+    file_path: *const c_char,
+    dataset_rid: *const c_char,
+    out_job: *mut i32,
+) -> i32 {
+    guard(|| {
+        let client = lookup_handle!(ClientHandle, client);
+        let file_path = match read_required_str(file_path, "file_path") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        let dataset_rid = match read_required_str(dataset_rid, "dataset_rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if out_job.is_null() {
+            return fail(NominalErrorCode::NullArgument, "out_job must not be null");
+        }
+
+        match block_on(client.ingest().upload_avro_stream(
+            &file_path,
+            dataset_rid.as_str(),
+            AvroStreamIngest::new(),
+        )) {
+            Ok((job, rid)) => {
+                let handle = IngestJobHandle::insert(FfiIngestJob {
+                    job,
+                    result_rid: Some(rid),
+                });
+                // SAFETY: out_job checked non-null above; caller owns it.
+                unsafe { *out_job = handle };
+                0
+            }
+            Err(err) => fail_sdk(err),
+        }
+    })
+}
+
+/// Uploads a standalone video file (`.mp4` / `.mkv` / `.avi` / `.ts`) whose
+/// first frame is at `start_ms` (`f64` Unix milliseconds, UTC) and ingests
+/// it into the EXISTING video resource with the given RID. Blocks until the
+/// upload completes and the server accepts the ingest. Writes a job handle
+/// to `out_job`; `nominal_ingest_job_result_rid` on it reports the video
+/// RID. For a video stream inside an MCAP file use
+/// `nominal_ingest_video_mcap` instead.
+#[no_mangle]
+pub extern "C" fn nominal_ingest_video(
+    client: i32,
+    file_path: *const c_char,
+    video_rid: *const c_char,
+    start_ms: f64,
+    out_job: *mut i32,
+) -> i32 {
+    guard(|| {
+        let client = lookup_handle!(ClientHandle, client);
+        let file_path = match read_required_str(file_path, "file_path") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        let video_rid = match read_required_str(video_rid, "video_rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        let start = match ms_to_datetime(start_ms, "start_ms") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if out_job.is_null() {
+            return fail(NominalErrorCode::NullArgument, "out_job must not be null");
+        }
+
+        match block_on(client.ingest().upload_video(
+            &file_path,
+            video_rid.as_str(),
+            VideoIngest::starting_at(start),
+        )) {
+            Ok((job, rid)) => {
+                let handle = IngestJobHandle::insert(FfiIngestJob {
+                    job,
+                    result_rid: Some(rid),
+                });
+                // SAFETY: out_job checked non-null above; caller owns it.
+                unsafe { *out_job = handle };
+                0
+            }
+            Err(err) => fail_sdk(err),
+        }
+    })
+}
+
+/// Uploads an MCAP file and extracts the single video stream on `topic`
+/// into the EXISTING video resource with the given RID (per-frame timestamps
+/// come from the MCAP log times). Blocks until the upload completes and the
+/// server accepts the ingest. Writes a job handle to `out_job`;
+/// `nominal_ingest_job_result_rid` on it reports the video RID.
+#[no_mangle]
+pub extern "C" fn nominal_ingest_video_mcap(
+    client: i32,
+    file_path: *const c_char,
+    video_rid: *const c_char,
+    topic: *const c_char,
+    out_job: *mut i32,
+) -> i32 {
+    guard(|| {
+        let client = lookup_handle!(ClientHandle, client);
+        let file_path = match read_required_str(file_path, "file_path") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        let video_rid = match read_required_str(video_rid, "video_rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        let topic = match read_required_str(topic, "topic") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if topic.is_empty() {
+            return fail(NominalErrorCode::InvalidArgument, "topic must not be empty");
+        }
+        if out_job.is_null() {
+            return fail(NominalErrorCode::NullArgument, "out_job must not be null");
+        }
+
+        match block_on(client.ingest().upload_video(
+            &file_path,
+            video_rid.as_str(),
+            VideoIngest::mcap_topic(topic),
+        )) {
             Ok((job, rid)) => {
                 let handle = IngestJobHandle::insert(FfiIngestJob {
                     job,

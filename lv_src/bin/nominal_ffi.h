@@ -970,6 +970,140 @@ int32_t nominal_ingest_parquet(int32_t client,
                                int32_t *out_job);
 
 /*
+ Starts staging options for an MCAP ingest. All options are optional — an
+ untouched staging handle ingests every topic. Fire it with
+ `nominal_ingest_mcap`; free with `nominal_ingest_mcap_free` (the ingest
+ call does not free, so one staging handle can serve several files).
+ */
+int32_t nominal_ingest_mcap_begin(int32_t *out_staging);
+
+/*
+ Ingests only the given topic (repeatable). Mutually exclusive with
+ `nominal_ingest_mcap_exclude_topic` — setting both fails at ingest time.
+ */
+int32_t nominal_ingest_mcap_include_topic(int32_t staging, const char *topic);
+
+/*
+ Skips the given topic during ingest (repeatable). Mutually exclusive with
+ `nominal_ingest_mcap_include_topic` — setting both fails at ingest time.
+ */
+int32_t nominal_ingest_mcap_exclude_topic(int32_t staging, const char *topic);
+
+/*
+ Applies a fixed tag value to every row in the file (repeatable).
+ */
+int32_t nominal_ingest_mcap_add_file_tag(int32_t staging, const char *tag, const char *value);
+
+/*
+ If true, invalid MCAP topics are skipped instead of failing the whole
+ ingest (defaults to the server-side default, false).
+ */
+int32_t nominal_ingest_mcap_set_ignore_invalid_topics(int32_t staging, bool ignore);
+
+/*
+ Frees an MCAP-ingest staging handle. Freeing twice returns an error.
+ */
+int32_t nominal_ingest_mcap_free(int32_t staging);
+
+/*
+ Uploads an MCAP file and ingests its protobuf timeseries data into the
+ existing dataset with the given RID, using the staged options. Blocks
+ until the upload completes and the server accepts the ingest. Writes a
+ job handle to `out_job` (see `nominal_ingest_csv` for the job-handle
+ contract). The staging handle stays valid for reuse.
+ */
+int32_t nominal_ingest_mcap(int32_t client,
+                            int32_t staging,
+                            const char *file_path,
+                            const char *dataset_rid,
+                            int32_t *out_job);
+
+/*
+ Starts staging options for an ArduPilot DataFlash (`.bin`) ingest. File
+ tags are the only option — an untouched staging handle is valid. Fire it
+ with `nominal_ingest_dataflash`; free with
+ `nominal_ingest_dataflash_free`.
+ */
+int32_t nominal_ingest_dataflash_begin(int32_t *out_staging);
+
+/*
+ Applies a fixed tag value to every row in the file (repeatable).
+ */
+int32_t nominal_ingest_dataflash_add_file_tag(int32_t staging, const char *tag, const char *value);
+
+/*
+ Frees a DataFlash-ingest staging handle. Freeing twice returns an error.
+ */
+int32_t nominal_ingest_dataflash_free(int32_t staging);
+
+/*
+ Uploads an ArduPilot DataFlash (`.bin`) file and ingests it into the
+ existing dataset with the given RID, using the staged file tags. Blocks
+ until the upload completes and the server accepts the ingest. Writes a
+ job handle to `out_job` (see `nominal_ingest_csv` for the job-handle
+ contract). The staging handle stays valid for reuse.
+ */
+int32_t nominal_ingest_dataflash(int32_t client,
+                                 int32_t staging,
+                                 const char *file_path,
+                                 const char *dataset_rid,
+                                 int32_t *out_job);
+
+/*
+ Uploads a journald JSON file (`.jsonl` / `.jsonl.gz`) and ingests it into
+ the existing dataset with the given RID. `channel` names the channel the
+ log lines land in (null or empty = the server default, `logs`). Blocks
+ until the upload completes and the server accepts the ingest. Writes a
+ job handle to `out_job` (see `nominal_ingest_csv` for the job-handle
+ contract).
+ */
+int32_t nominal_ingest_journal_json(int32_t client,
+                                    const char *file_path,
+                                    const char *dataset_rid,
+                                    const char *channel,
+                                    int32_t *out_job);
+
+/*
+ Uploads a Nominal Avro-stream (`.avro`) file and ingests it into the
+ existing dataset with the given RID. The Avro record schema is fixed
+ server-side; there are no options. Blocks until the upload completes and
+ the server accepts the ingest. Writes a job handle to `out_job` (see
+ `nominal_ingest_csv` for the job-handle contract).
+ */
+int32_t nominal_ingest_avro_stream(int32_t client,
+                                   const char *file_path,
+                                   const char *dataset_rid,
+                                   int32_t *out_job);
+
+/*
+ Uploads a standalone video file (`.mp4` / `.mkv` / `.avi` / `.ts`) whose
+ first frame is at `start_ms` (`f64` Unix milliseconds, UTC) and ingests
+ it into the EXISTING video resource with the given RID. Blocks until the
+ upload completes and the server accepts the ingest. Writes a job handle
+ to `out_job`; `nominal_ingest_job_result_rid` on it reports the video
+ RID. For a video stream inside an MCAP file use
+ `nominal_ingest_video_mcap` instead.
+ */
+int32_t nominal_ingest_video(int32_t client,
+                             const char *file_path,
+                             const char *video_rid,
+                             double start_ms,
+                             int32_t *out_job);
+
+/*
+ Uploads an MCAP file and extracts the single video stream on `topic`
+ into the EXISTING video resource with the given RID (per-frame timestamps
+ come from the MCAP log times). Blocks until the upload completes and the
+ server accepts the ingest. Writes a job handle to `out_job`;
+ `nominal_ingest_job_result_rid` on it reports the video RID.
+ */
+int32_t nominal_ingest_video_mcap(int32_t client,
+                                  const char *file_path,
+                                  const char *video_rid,
+                                  const char *topic,
+                                  int32_t *out_job);
+
+/*
  Fetches the current state of the ingest job with the given RID, writing a
  job handle to `out_job` (free with `nominal_ingest_job_free`).
  */
