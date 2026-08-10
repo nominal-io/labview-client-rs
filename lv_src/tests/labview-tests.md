@@ -8,6 +8,7 @@ run. Status as of 2026-08-08:
 | 1. Offline client lifecycle | handle/error/string machinery, no network | PASSED 2026-08-07 |
 | 2. Real API list + loop | auth, search, handle lists, getters at scale | PASSED 2026-08-07 |
 | 3. Staged create/update | staging-handle VIs, labels/properties, archive | PASSED 2026-08-08 |
+| 4. Run lifecycle | run VIs, f64 timestamps, run-number search, asset link | NOT YET RUN |
 
 Re-run all three after any re-import, and after any DLL change that touches
 signatures.
@@ -120,3 +121,66 @@ Update (also demonstrates REPLACE semantics — deliberate):
 Cleanup:
 13. `nominal asset archive.vi` — client + RID.
 14. `nominal asset free.vi` on both asset handles; `nominal client free.vi`.
+
+## Test 4 — Run lifecycle: staged create → verify → search → update → archive (NOT YET RUN)
+
+Creates a REAL run in the workspace; the final archive step hides it. Needs a
+real token. New ground vs Test 3: f64 millisecond timestamps in both
+directions, the run-number getter, search by run number, and linking a run to
+an asset.
+
+**Timestamps in LabVIEW.** Every time parameter is a DBL of Unix
+milliseconds (UTC). LabVIEW's `Get Date/Time In Seconds` uses the 1904 epoch,
+so convert: `(To Double Precision Float(Get Date/Time In Seconds) -
+2082844800) * 1000`. Wrap that in a small "NowMs.vi" — every run test needs
+it. Send whole milliseconds (round the result) so values compare exactly on
+the way back; the DLL rounds fractional input to the nearest ms.
+
+Setup — one asset to link against:
+1. `nominal client new.vi` — real token.
+2. `nominal asset create.vi` — name `labview-ffi-run-test-asset` (flat
+   create is fine) → asset handle; `nominal asset rid.vi` → keep the RID on
+   a wire.
+
+Staged create:
+3. `nominal run create begin.vi` — name `labview-ffi-run-1`, start_ms =
+   NowMs → staging.
+4. `nominal run create set description.vi` — any text.
+5. `nominal run create set end.vi` — NowMs + 60000 (a one-minute run).
+6. For Loop over `["labview", "ffi-test"]` → `nominal run create add
+   label.vi`.
+7. `nominal run create set property.vi` — key `phase`, value `smoke-test`.
+8. `nominal run create add asset.vi` — the asset RID from step 2.
+9. `nominal run create commit.vi` — client + staging → run handle.
+10. `nominal run create free.vi`.
+
+Verify on the run handle:
+- `run name` = `labview-ffi-run-1`; `run description` matches
+- `run number` (U32) — real number assigned by the server, keep it on a wire
+- `run start` = the start_ms you sent (exact, if you sent whole ms)
+- `run end` — is_present true, value = start + 60000
+- `run created at` — recent, sanity-check only
+- `run label count` = 2; `label at` 0/1
+- `run property count` = 1; key `phase`, value `smoke-test`
+- `run asset count` = 1; `run asset rid at` 0 = the RID from step 2
+- `run rid` — keep on a wire; `run url` — optional browser check (URL uses
+  the run number, not the RID)
+
+Search by run number (proves the non-string filters):
+11. `nominal run search.vi` — search_text/label/property empty, run_number =
+    the number from the verify step, has_start_after/has_end_before false →
+    expect count = 1; `nominal handle list get` index 0 → `run rid` matches;
+    free the run handle and the list.
+
+Staged update (replace semantics again):
+12. `nominal run update begin.vi` → staging; `add label` `updated`;
+    `set end` NowMs + 120000.
+13. `nominal run update commit.vi` — client, run RID, staging → new handle.
+14. `nominal run update free.vi`. On the NEW handle: `label count` = 1
+    (labels replaced), `end` = the new value, `start` unchanged.
+
+Cleanup:
+15. `nominal run archive.vi` — client + run RID.
+16. `nominal asset archive.vi` — client + asset RID (from step 2).
+17. `nominal run free.vi` on both run handles, `nominal asset free.vi`,
+    `nominal client free.vi`.
