@@ -10,7 +10,8 @@ run. Status as of 2026-08-08:
 | 3. Staged create/update | staging-handle VIs, labels/properties, archive | PASSED 2026-08-08 |
 | 4. Run lifecycle | run VIs, f64 timestamps, run-number search, asset link | PASSED 2026-08-08 |
 | 5. Dataset lifecycle | dataset VIs, channel delimiter, catalog endpoints | PASSED 2026-08-08 |
-| 6. Video lifecycle | video VIs, /video/v1 endpoints | NOT YET RUN |
+| 6. Video lifecycle | video VIs, /video/v1 endpoints | PASSED 2026-08-08 |
+| 7. Channel metadata | channel VIs, data-type enum, metadata upsert | NOT YET RUN |
 
 Re-run all three after any re-import, and after any DLL change that touches
 signatures.
@@ -215,12 +216,69 @@ catalog endpoints behind the scenes.
 10. Cleanup: `nominal dataset archive.vi`, free both dataset handles,
     `nominal client free.vi`.
 
-## Test 6 — Video lifecycle (NOT YET RUN)
+## Test 6 — Video lifecycle (PASSED 2026-08-08)
 
-Identical wiring to Test 5, swapping dataset VIs for video VIs — videos have
-the exact same field surface (no channel delimiter, no timestamps beyond
-created-at). Creating a video makes an empty metadata shell; the media file
-would arrive via ingest later. Quick run: staged create
-(`labview-ffi-video-1`, description, label `labview`, property
-`camera`=`front`) → verify getters → search by search_text `labview-ffi` →
-staged update (label replace) → archive → free everything.
+Same shape as Test 5, against the video VIs. Creates a REAL video in the
+workspace; the archive step hides it. A video created this way is an empty
+metadata shell — the media file would arrive via ingest later — so there is
+nothing to play, only metadata to verify. Videos have no channel delimiter
+and no timestamps beyond created-at.
+
+1. `nominal client new.vi` — real token.
+2. `nominal video create begin.vi` — name `labview-ffi-video-1` → staging.
+3. `nominal video create set description.vi` — any text.
+4. `nominal video create add label.vi` — `labview`.
+5. `nominal video create set property.vi` — key `camera`, value `front`.
+6. `nominal video create commit.vi` — client + staging → video handle.
+7. `nominal video create free.vi` (commit does NOT free).
+8. Verify on the video handle (padded buffers as usual):
+   - `video name` = `labview-ffi-video-1`
+   - `video description` — is_present true, matches
+   - `video label count` = 1; `label at 0` = `labview`
+   - `video property count` = 1; key `camera`, value `front`
+   - `video created at` — recent, sanity-check only
+   - `video rid` — keep on a wire, needed below
+   - `video url` — optional browser check (goes to the data-sources page)
+9. `nominal video search.vi` — search_text `labview-ffi`, other filters
+   empty → expect your video among the results (loop
+   `nominal handle list get` → `video rid`, compare). Free the video
+   handles and the list.
+10. Staged update: `nominal video update begin.vi` → staging;
+    `nominal video update add label.vi` — `updated`;
+    `nominal video update commit.vi` — client, RID, staging → new handle.
+    `nominal video update free.vi`. On the NEW handle: `label count` = 1,
+    `label at 0` = `updated` — the original label is gone (replace
+    semantics, same as every other type).
+11. Cleanup: `nominal video archive.vi` — client + RID;
+    `nominal video free.vi` on both video handles;
+    `nominal client free.vi`.
+
+## Test 7 — Channel metadata (NOT YET RUN)
+
+Channels have no create/archive lifecycle — they exist on data sources, and
+their metadata can be seeded via the upsert even before data arrives. This
+test uses a fresh empty dataset so no real channel data is touched.
+
+The `data_type` parameter is a `NominalChannelDataType` I32:
+0=Double 1=Int 2=Uint 3=String 4=Log 5=DoubleArray 6=StringArray 7=Struct
+8=Video 9=Spatial 10=Unknown (output only — never valid as input). In
+`nominal channel search.vi`, -1 means "no data-type filter".
+
+1. `nominal client new.vi` — real token.
+2. `nominal dataset create.vi` — name `labview-ffi-channel-test` (flat is
+   fine) → dataset handle; `nominal dataset rid.vi` → RID on a wire.
+3. `nominal channel set metadata.vi` — data_source_rid = the dataset RID,
+   name `labview.test.channel`, data_type 0 (Double), description
+   `smoke test channel`, unit `degC`, clear_unit false → channel handle.
+   This seeds the metadata record (the channel has no data — that's fine).
+4. Verify on the returned handle: `channel name`, `channel data source
+   rid`, `channel description` (is_present true), `channel unit` = `degC`
+   (is_present true), `channel data type` = 0.
+5. `nominal channel get.vi` — same RID + name → fresh handle; verify the
+   same values came back from the server. Free both channel handles.
+6. Optional, against real data: `nominal channel list.vi` with the RID of
+   any dataset that has ingested data → loop `nominal handle list get` →
+   `channel name` array. (On the empty test dataset the seeded metadata may
+   or may not appear in search results — don't treat that as a failure.)
+7. Cleanup: `nominal dataset archive.vi`, `nominal dataset free.vi`,
+   `nominal client free.vi`.

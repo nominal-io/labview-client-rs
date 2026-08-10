@@ -23,6 +23,7 @@
 			<Item Name="4 - Run lifecycle.vi" Type="VI" URL="../tests/4 - Run lifecycle.vi"/>
 			<Item Name="5 - Dataset Lifecycle.vi" Type="VI" URL="../tests/5 - Dataset Lifecycle.vi"/>
 			<Item Name="6 - Video Lifecycle.vi" Type="VI" URL="../tests/6 - Video Lifecycle.vi"/>
+			<Item Name="7 - Channel metadata.vi" Type="VI" URL="../tests/7 - Channel metadata.vi"/>
 		</Item>
 		<Item Name="client.lvlib" Type="Library" URL="../client/client.lvlib"/>
 		<Item Name="Dependencies" Type="Dependencies">

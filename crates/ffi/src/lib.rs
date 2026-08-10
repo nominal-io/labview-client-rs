@@ -8,6 +8,7 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
 pub mod asset;
+pub mod channel;
 pub mod client;
 pub mod dataset;
 pub mod error;

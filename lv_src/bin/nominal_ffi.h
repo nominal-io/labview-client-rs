@@ -391,6 +391,110 @@ int32_t nominal_asset_data_source_rid_at(int32_t asset,
 int32_t nominal_asset_data_source_type_at(int32_t asset, int32_t index, int32_t *out_type);
 
 /*
+ Lists every channel on a data source (dataset, video, or connection RID),
+ returning a handle list.
+
+ On success `*out_list` is a handle list of `*out_count` channel handles —
+ read them with `nominal_handle_list_get` and free the list with
+ `nominal_handle_list_free`. Each channel handle stays valid until passed
+ to `nominal_channel_free`, independent of the list.
+ */
+int32_t nominal_channel_list(int32_t client,
+                             const char *data_source_rid,
+                             int32_t *out_list,
+                             uint32_t *out_count);
+
+/*
+ Searches channels, returning a handle list (see `nominal_channel_list`
+ for ownership).
+
+ Filters are optional and combined with AND:
+ - `data_source_rid`: restrict to one data source (null or empty = all the
+   caller can see — expect that to be slow on large workspaces)
+ - `substring`: case-insensitive substring the channel name must contain
+ - `data_type`: a `NominalChannelDataType` value, or -1 for no filter
+ */
+int32_t nominal_channel_search(int32_t client,
+                               const char *data_source_rid,
+                               const char *substring,
+                               int32_t data_type,
+                               int32_t *out_list,
+                               uint32_t *out_count);
+
+/*
+ Fetches one channel's metadata by data-source RID and channel name,
+ writing its handle to `out_channel`. Free with `nominal_channel_free`.
+ */
+int32_t nominal_channel_get(int32_t client,
+                            const char *data_source_rid,
+                            const char *name,
+                            int32_t *out_channel);
+
+/*
+ Sets a channel's editable metadata. `data_type` (a `NominalChannelDataType`
+ value) is required — the upsert endpoint needs it when the metadata record
+ doesn't exist yet. `description` and `unit` are optional (null or empty =
+ leave untouched); pass `clear_unit` true to remove an existing unit
+ (mutually exclusive with `unit`). Writes a handle reflecting the updated
+ metadata to `out_channel` (free with `nominal_channel_free`).
+ */
+int32_t nominal_channel_set_metadata(int32_t client,
+                                     const char *data_source_rid,
+                                     const char *name,
+                                     int32_t data_type,
+                                     const char *description,
+                                     const char *unit,
+                                     bool clear_unit,
+                                     int32_t *out_channel);
+
+/*
+ Frees a channel handle. Freeing twice returns an error.
+ */
+int32_t nominal_channel_free(int32_t channel);
+
+/*
+ Writes the channel's name into `buf`, storing the byte count needed in
+ `out_needed`.
+ */
+int32_t nominal_channel_name(int32_t channel, char *buf, uint32_t cap, uint32_t *out_needed);
+
+/*
+ Writes the RID of the data source that owns this channel into `buf`,
+ storing the byte count needed in `out_needed`.
+ */
+int32_t nominal_channel_data_source_rid(int32_t channel,
+                                        char *buf,
+                                        uint32_t cap,
+                                        uint32_t *out_needed);
+
+/*
+ Writes the channel's description into `buf`, and whether one is set into
+ `is_present` (an absent description reports 0 bytes needed).
+ */
+int32_t nominal_channel_description(int32_t channel,
+                                    char *buf,
+                                    uint32_t cap,
+                                    uint32_t *out_needed,
+                                    bool *is_present);
+
+/*
+ Writes the channel's unit symbol (e.g. "m/s") into `buf`, and whether one
+ is set into `is_present` (an absent unit reports 0 bytes needed).
+ */
+int32_t nominal_channel_unit(int32_t channel,
+                             char *buf,
+                             uint32_t cap,
+                             uint32_t *out_needed,
+                             bool *is_present);
+
+/*
+ Stores the channel's data type in `out_type` as a
+ `NominalChannelDataType` value (`Unknown` = 10 for types this library
+ doesn't recognize).
+ */
+int32_t nominal_channel_data_type(int32_t channel, int32_t *out_type);
+
+/*
  Creates a Nominal API client and writes its handle to `out_client`.
 
  `token` is required. `workspace_rid` and `base_url` may be null or empty:
