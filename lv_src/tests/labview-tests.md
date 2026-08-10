@@ -9,7 +9,8 @@ run. Status as of 2026-08-08:
 | 2. Real API list + loop | auth, search, handle lists, getters at scale | PASSED 2026-08-07 |
 | 3. Staged create/update | staging-handle VIs, labels/properties, archive | PASSED 2026-08-08 |
 | 4. Run lifecycle | run VIs, f64 timestamps, run-number search, asset link | PASSED 2026-08-08 |
-| 5. Dataset lifecycle | dataset VIs, channel delimiter, catalog endpoints | NOT YET RUN |
+| 5. Dataset lifecycle | dataset VIs, channel delimiter, catalog endpoints | PASSED 2026-08-08 |
+| 6. Video lifecycle | video VIs, /video/v1 endpoints | NOT YET RUN |
 
 Re-run all three after any re-import, and after any DLL change that touches
 signatures.
@@ -213,3 +214,13 @@ catalog endpoints behind the scenes.
    `updated` (replace semantics). `update free`.
 10. Cleanup: `nominal dataset archive.vi`, free both dataset handles,
     `nominal client free.vi`.
+
+## Test 6 — Video lifecycle (NOT YET RUN)
+
+Identical wiring to Test 5, swapping dataset VIs for video VIs — videos have
+the exact same field surface (no channel delimiter, no timestamps beyond
+created-at). Creating a video makes an empty metadata shell; the media file
+would arrive via ingest later. Quick run: staged create
+(`labview-ffi-video-1`, description, label `labview`, property
+`camera`=`front`) → verify getters → search by search_text `labview-ffi` →
+staged update (label replace) → archive → free everything.

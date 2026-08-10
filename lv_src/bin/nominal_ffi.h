@@ -1018,4 +1018,233 @@ int32_t nominal_run_data_source_rid_at(int32_t run,
  */
 int32_t nominal_run_data_source_type_at(int32_t run, int32_t index, int32_t *out_type);
 
+/*
+ Creates an empty video (metadata shell — the media file arrives via
+ ingest) with the given name and optional description, writing the new
+ video's handle to `out_video`. Free with `nominal_video_free`. For labels
+ or properties use the `nominal_video_create_begin` staging flow instead.
+ */
+int32_t nominal_video_create(int32_t client,
+                             const char *name,
+                             const char *description,
+                             int32_t *out_video);
+
+/*
+ Fetches the video with the given RID, writing its handle to `out_video`.
+ Free with `nominal_video_free`.
+ */
+int32_t nominal_video_get(int32_t client, const char *rid, int32_t *out_video);
+
+/*
+ Lists all videos (newest first), returning a handle list.
+
+ On success `*out_list` is a handle list of `*out_count` video handles —
+ read them with `nominal_handle_list_get` and free the list with
+ `nominal_handle_list_free`. Each video handle stays valid until passed to
+ `nominal_video_free`, independent of the list.
+ */
+int32_t nominal_video_list(int32_t client, int32_t *out_list, uint32_t *out_count);
+
+/*
+ Searches videos, returning a handle list (see `nominal_video_list` for
+ ownership).
+
+ Filters may each be null or empty ("no filter"); the ones provided are
+ combined with AND:
+ - `search_text`: fuzzy full-text match on name and description
+ - `label`: exact label match
+ - `property_key` + `property_value`: property match (both or neither)
+ */
+int32_t nominal_video_search(int32_t client,
+                             const char *search_text,
+                             const char *label,
+                             const char *property_key,
+                             const char *property_value,
+                             int32_t *out_list,
+                             uint32_t *out_count);
+
+/*
+ Updates a video's name and/or description. Null or empty arguments leave
+ that field unchanged. Writes a handle to the updated video to `out_video`
+ (free with `nominal_video_free`). For labels or properties use the
+ `nominal_video_update_begin` staging flow instead.
+ */
+int32_t nominal_video_update(int32_t client,
+                             const char *rid,
+                             const char *name,
+                             const char *description,
+                             int32_t *out_video);
+
+/*
+ Archives a video (hidden from the UI, not deleted).
+ */
+int32_t nominal_video_archive(int32_t client, const char *rid);
+
+/*
+ Unarchives a video, restoring its visibility in the UI.
+ */
+int32_t nominal_video_unarchive(int32_t client, const char *rid);
+
+/*
+ Frees a video handle. Freeing twice returns an error.
+ */
+int32_t nominal_video_free(int32_t video);
+
+/*
+ Starts staging a video-create request with the (required) name. Add
+ optional fields with the `nominal_video_create_set_*` / `_add_*` calls,
+ then fire it with `nominal_video_create_commit`. Free with
+ `nominal_video_create_free` (commit does not free).
+ */
+int32_t nominal_video_create_begin(const char *name, int32_t *out_staging);
+
+/*
+ Sets the description on a staged video create (empty clears it).
+ */
+int32_t nominal_video_create_set_description(int32_t staging, const char *description);
+
+/*
+ Adds one label to a staged video create.
+ */
+int32_t nominal_video_create_add_label(int32_t staging, const char *label);
+
+/*
+ Sets one property on a staged video create (same key overwrites).
+ */
+int32_t nominal_video_create_set_property(int32_t staging, const char *key, const char *value);
+
+/*
+ Creates the staged video, writing the new video's handle to `out_video`
+ (free with `nominal_video_free`). The staging handle stays valid — free
+ it with `nominal_video_create_free`.
+ */
+int32_t nominal_video_create_commit(int32_t client, int32_t staging, int32_t *out_video);
+
+/*
+ Frees a video-create staging handle. Freeing twice returns an error.
+ */
+int32_t nominal_video_create_free(int32_t staging);
+
+/*
+ Starts staging a video update. Only fields set via the
+ `nominal_video_update_set_*` / `_add_*` calls are changed at commit; the
+ rest remain untouched. Free with `nominal_video_update_free`.
+ */
+int32_t nominal_video_update_begin(int32_t *out_staging);
+
+/*
+ Stages a new name.
+ */
+int32_t nominal_video_update_set_name(int32_t staging, const char *name);
+
+/*
+ Stages a new description (empty clears the description).
+ */
+int32_t nominal_video_update_set_description(int32_t staging, const char *description);
+
+/*
+ Adds one label to the staged update. NOTE: touching labels at all means
+ the commit REPLACES the video's entire label set with exactly the labels
+ accumulated here (upstream semantics) — to keep existing labels, add them
+ too.
+ */
+int32_t nominal_video_update_add_label(int32_t staging, const char *label);
+
+/*
+ Sets one property on the staged update (same key overwrites). NOTE: same
+ replace semantics as labels — touching properties at all means the commit
+ replaces the video's entire property map with the ones accumulated here.
+ */
+int32_t nominal_video_update_set_property(int32_t staging, const char *key, const char *value);
+
+/*
+ Applies the staged update to the video with the given RID, writing a
+ handle to the updated video to `out_video` (free with
+ `nominal_video_free`). At least one field must have been staged. The
+ staging handle stays valid — free it with `nominal_video_update_free`.
+ */
+int32_t nominal_video_update_commit(int32_t client,
+                                    const char *rid,
+                                    int32_t staging,
+                                    int32_t *out_video);
+
+/*
+ Frees a video-update staging handle. Freeing twice returns an error.
+ */
+int32_t nominal_video_update_free(int32_t staging);
+
+/*
+ Writes the video's RID into `buf`, storing the byte count needed in
+ `out_needed`.
+ */
+int32_t nominal_video_rid(int32_t video, char *buf, uint32_t cap, uint32_t *out_needed);
+
+/*
+ Writes the video's name into `buf`, storing the byte count needed in
+ `out_needed`.
+ */
+int32_t nominal_video_name(int32_t video, char *buf, uint32_t cap, uint32_t *out_needed);
+
+/*
+ Writes the video's description into `buf`, and whether one is set into
+ `is_present` (an absent description reports 0 bytes needed).
+ */
+int32_t nominal_video_description(int32_t video,
+                                  char *buf,
+                                  uint32_t cap,
+                                  uint32_t *out_needed,
+                                  bool *is_present);
+
+/*
+ Writes the URL for viewing this video in the Nominal web app into `buf`,
+ storing the byte count needed in `out_needed`.
+ */
+int32_t nominal_video_url(int32_t video, char *buf, uint32_t cap, uint32_t *out_needed);
+
+/*
+ Writes the video's creation time to `out_millis` as `f64` Unix
+ milliseconds (UTC).
+ */
+int32_t nominal_video_created_at(int32_t video, double *out_millis);
+
+/*
+ Stores the number of properties on the video in `out_count`.
+ */
+int32_t nominal_video_property_count(int32_t video, uint32_t *out_count);
+
+/*
+ Writes the key of the property at `index` (0-based, sorted-key order)
+ into `buf`, storing the byte count needed in `out_needed`.
+ */
+int32_t nominal_video_property_key_at(int32_t video,
+                                      int32_t index,
+                                      char *buf,
+                                      uint32_t cap,
+                                      uint32_t *out_needed);
+
+/*
+ Writes the value of the property at `index` (0-based, sorted-key order)
+ into `buf`, storing the byte count needed in `out_needed`.
+ */
+int32_t nominal_video_property_value_at(int32_t video,
+                                        int32_t index,
+                                        char *buf,
+                                        uint32_t cap,
+                                        uint32_t *out_needed);
+
+/*
+ Stores the number of labels on the video in `out_count`.
+ */
+int32_t nominal_video_label_count(int32_t video, uint32_t *out_count);
+
+/*
+ Writes the label at `index` (0-based) into `buf`, storing the byte count
+ needed in `out_needed`.
+ */
+int32_t nominal_video_label_at(int32_t video,
+                               int32_t index,
+                               char *buf,
+                               uint32_t cap,
+                               uint32_t *out_needed);
+
 #endif  /* NOMINAL_FFI_H */
