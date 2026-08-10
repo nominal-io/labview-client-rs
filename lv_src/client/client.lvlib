@@ -157,6 +157,20 @@
 	<Item Name="nominal run update set start.vi" Type="VI" URL="../VIs/nominal run update set start.vi"/>
 	<Item Name="nominal run update.vi" Type="VI" URL="../VIs/nominal run update.vi"/>
 	<Item Name="nominal run url.vi" Type="VI" URL="../VIs/nominal run url.vi"/>
+	<Item Name="nominal template commit id.vi" Type="VI" URL="../VIs/nominal template commit id.vi"/>
+	<Item Name="nominal template created at.vi" Type="VI" URL="../VIs/nominal template created at.vi"/>
+	<Item Name="nominal template description.vi" Type="VI" URL="../VIs/nominal template description.vi"/>
+	<Item Name="nominal template free.vi" Type="VI" URL="../VIs/nominal template free.vi"/>
+	<Item Name="nominal template get.vi" Type="VI" URL="../VIs/nominal template get.vi"/>
+	<Item Name="nominal template rid.vi" Type="VI" URL="../VIs/nominal template rid.vi"/>
+	<Item Name="nominal template title.vi" Type="VI" URL="../VIs/nominal template title.vi"/>
+	<Item Name="nominal template url.vi" Type="VI" URL="../VIs/nominal template url.vi"/>
+	<Item Name="nominal user display name.vi" Type="VI" URL="../VIs/nominal user display name.vi"/>
+	<Item Name="nominal user email.vi" Type="VI" URL="../VIs/nominal user email.vi"/>
+	<Item Name="nominal user free.vi" Type="VI" URL="../VIs/nominal user free.vi"/>
+	<Item Name="nominal user me.vi" Type="VI" URL="../VIs/nominal user me.vi"/>
+	<Item Name="nominal user org rid.vi" Type="VI" URL="../VIs/nominal user org rid.vi"/>
+	<Item Name="nominal user rid.vi" Type="VI" URL="../VIs/nominal user rid.vi"/>
 	<Item Name="nominal video archive.vi" Type="VI" URL="../VIs/nominal video archive.vi"/>
 	<Item Name="nominal video create add label.vi" Type="VI" URL="../VIs/nominal video create add label.vi"/>
 	<Item Name="nominal video create begin.vi" Type="VI" URL="../VIs/nominal video create begin.vi"/>
@@ -188,5 +202,37 @@
 	<Item Name="nominal video update set property.vi" Type="VI" URL="../VIs/nominal video update set property.vi"/>
 	<Item Name="nominal video update.vi" Type="VI" URL="../VIs/nominal video update.vi"/>
 	<Item Name="nominal video url.vi" Type="VI" URL="../VIs/nominal video url.vi"/>
+	<Item Name="nominal workbook archive.vi" Type="VI" URL="../VIs/nominal workbook archive.vi"/>
+	<Item Name="nominal workbook create add label.vi" Type="VI" URL="../VIs/nominal workbook create add label.vi"/>
+	<Item Name="nominal workbook create add scope asset.vi" Type="VI" URL="../VIs/nominal workbook create add scope asset.vi"/>
+	<Item Name="nominal workbook create add scope run.vi" Type="VI" URL="../VIs/nominal workbook create add scope run.vi"/>
+	<Item Name="nominal workbook create begin.vi" Type="VI" URL="../VIs/nominal workbook create begin.vi"/>
+	<Item Name="nominal workbook create commit.vi" Type="VI" URL="../VIs/nominal workbook create commit.vi"/>
+	<Item Name="nominal workbook create free.vi" Type="VI" URL="../VIs/nominal workbook create free.vi"/>
+	<Item Name="nominal workbook create set description.vi" Type="VI" URL="../VIs/nominal workbook create set description.vi"/>
+	<Item Name="nominal workbook create set property.vi" Type="VI" URL="../VIs/nominal workbook create set property.vi"/>
+	<Item Name="nominal workbook create set title.vi" Type="VI" URL="../VIs/nominal workbook create set title.vi"/>
+	<Item Name="nominal workbook created at.vi" Type="VI" URL="../VIs/nominal workbook created at.vi"/>
+	<Item Name="nominal workbook description.vi" Type="VI" URL="../VIs/nominal workbook description.vi"/>
+	<Item Name="nominal workbook free.vi" Type="VI" URL="../VIs/nominal workbook free.vi"/>
+	<Item Name="nominal workbook get.vi" Type="VI" URL="../VIs/nominal workbook get.vi"/>
+	<Item Name="nominal workbook label at.vi" Type="VI" URL="../VIs/nominal workbook label at.vi"/>
+	<Item Name="nominal workbook label count.vi" Type="VI" URL="../VIs/nominal workbook label count.vi"/>
+	<Item Name="nominal workbook list.vi" Type="VI" URL="../VIs/nominal workbook list.vi"/>
+	<Item Name="nominal workbook name.vi" Type="VI" URL="../VIs/nominal workbook name.vi"/>
+	<Item Name="nominal workbook property count.vi" Type="VI" URL="../VIs/nominal workbook property count.vi"/>
+	<Item Name="nominal workbook property key at.vi" Type="VI" URL="../VIs/nominal workbook property key at.vi"/>
+	<Item Name="nominal workbook property value at.vi" Type="VI" URL="../VIs/nominal workbook property value at.vi"/>
+	<Item Name="nominal workbook rid.vi" Type="VI" URL="../VIs/nominal workbook rid.vi"/>
+	<Item Name="nominal workbook scope rid at.vi" Type="VI" URL="../VIs/nominal workbook scope rid at.vi"/>
+	<Item Name="nominal workbook scope rid count.vi" Type="VI" URL="../VIs/nominal workbook scope rid count.vi"/>
+	<Item Name="nominal workbook scope type.vi" Type="VI" URL="../VIs/nominal workbook scope type.vi"/>
+	<Item Name="nominal workbook search.vi" Type="VI" URL="../VIs/nominal workbook search.vi"/>
+	<Item Name="nominal workbook unarchive.vi" Type="VI" URL="../VIs/nominal workbook unarchive.vi"/>
+	<Item Name="nominal workbook url.vi" Type="VI" URL="../VIs/nominal workbook url.vi"/>
+	<Item Name="nominal workspace display name.vi" Type="VI" URL="../VIs/nominal workspace display name.vi"/>
+	<Item Name="nominal workspace free.vi" Type="VI" URL="../VIs/nominal workspace free.vi"/>
+	<Item Name="nominal workspace list.vi" Type="VI" URL="../VIs/nominal workspace list.vi"/>
+	<Item Name="nominal workspace rid.vi" Type="VI" URL="../VIs/nominal workspace rid.vi"/>
 	<Item Name="nominalClient_64.dll" Type="Document" URL="../nominalClient_64.dll"/>
 </Library>
