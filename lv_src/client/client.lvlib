@@ -5,7 +5,9 @@
 	<Property Name="NI.Lib.Version" Type="Str">1.0.0.0</Property>
 	<Property Name="NI.LV.All.SourceOnly" Type="Bool">true</Property>
 	<Item Name="subvi" Type="Folder">
+		<Item Name="Create String Buffer.vi" Type="VI" URL="../subvi/Create String Buffer.vi"/>
 		<Item Name="Error Converter (ErrCode or Status).vi" Type="VI" URL="../subvi/Error Converter (ErrCode or Status).vi"/>
+		<Item Name="To Unix Milliseconds.vi" Type="VI" URL="../subvi/To Unix Milliseconds.vi"/>
 	</Item>
 	<Item Name="nominal asset archive.vi" Type="VI" URL="../VIs/nominal asset archive.vi"/>
 	<Item Name="nominal asset create add label.vi" Type="VI" URL="../VIs/nominal asset create add label.vi"/>
