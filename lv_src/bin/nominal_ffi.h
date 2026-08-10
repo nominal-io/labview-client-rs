@@ -1329,6 +1329,41 @@ int32_t nominal_template_url(int32_t template_, char *buf, uint32_t cap, uint32_
 int32_t nominal_template_created_at(int32_t template_, double *out_millis);
 
 /*
+ Fetches the authenticated user (the owner of the client's token),
+ writing its handle to `out_user`. Free with `nominal_user_free`.
+ */
+int32_t nominal_user_me(int32_t client, int32_t *out_user);
+
+/*
+ Frees a user handle. Freeing twice returns an error.
+ */
+int32_t nominal_user_free(int32_t user);
+
+/*
+ Writes the user's RID into `buf`, storing the byte count needed in
+ `out_needed`.
+ */
+int32_t nominal_user_rid(int32_t user, char *buf, uint32_t cap, uint32_t *out_needed);
+
+/*
+ Writes the RID of the user's organization into `buf`, storing the byte
+ count needed in `out_needed`.
+ */
+int32_t nominal_user_org_rid(int32_t user, char *buf, uint32_t cap, uint32_t *out_needed);
+
+/*
+ Writes the user's email into `buf`, storing the byte count needed in
+ `out_needed`.
+ */
+int32_t nominal_user_email(int32_t user, char *buf, uint32_t cap, uint32_t *out_needed);
+
+/*
+ Writes the user's display name into `buf`, storing the byte count needed
+ in `out_needed`.
+ */
+int32_t nominal_user_display_name(int32_t user, char *buf, uint32_t cap, uint32_t *out_needed);
+
+/*
  Creates an empty video (metadata shell — the media file arrives via
  ingest) with the given name and optional description, writing the new
  video's handle to `out_video`. Free with `nominal_video_free`. For labels
@@ -1763,5 +1798,38 @@ int32_t nominal_workbook_label_at(int32_t workbook,
                                   char *buf,
                                   uint32_t cap,
                                   uint32_t *out_needed);
+
+/*
+ Lists the workspaces the authenticated user can access (sorted by display
+ name), returning a handle list.
+
+ On success `*out_list` is a handle list of `*out_count` workspace handles
+ — read them with `nominal_handle_list_get` and free the list with
+ `nominal_handle_list_free`. Each workspace handle stays valid until
+ passed to `nominal_workspace_free`, independent of the list.
+ */
+int32_t nominal_workspace_list(int32_t client, int32_t *out_list, uint32_t *out_count);
+
+/*
+ Frees a workspace handle. Freeing twice returns an error.
+ */
+int32_t nominal_workspace_free(int32_t workspace);
+
+/*
+ Writes the workspace's RID into `buf`, storing the byte count needed in
+ `out_needed`. This is the value `nominal_client_new` takes as
+ `workspace_rid`.
+ */
+int32_t nominal_workspace_rid(int32_t workspace, char *buf, uint32_t cap, uint32_t *out_needed);
+
+/*
+ Writes the workspace's display name into `buf`, and whether one is set
+ into `is_present` (an absent name reports 0 bytes needed).
+ */
+int32_t nominal_workspace_display_name(int32_t workspace,
+                                       char *buf,
+                                       uint32_t cap,
+                                       uint32_t *out_needed,
+                                       bool *is_present);
 
 #endif  /* NOMINAL_FFI_H */

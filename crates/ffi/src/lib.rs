@@ -18,5 +18,7 @@ pub mod run;
 pub mod runtime;
 pub mod strings;
 pub mod template;
+pub mod user;
 pub mod video;
 pub mod workbook;
+pub mod workspace;

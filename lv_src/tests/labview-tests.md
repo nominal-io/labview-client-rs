@@ -14,6 +14,8 @@ run. Status as of 2026-08-08:
 | 7. Channel metadata | channel VIs, data-type enum, metadata upsert | PASSED 2026-08-08 |
 | 8. CSV ingest | file upload, ingest job polling, real data in a dataset | PASSED 2026-08-08 |
 | 9. Workbook from template | template get, workbook create/search/archive | NOT YET RUN |
+| 10. Who am I | user VIs, token identity probe | NOT YET RUN |
+| 11. Workspace discovery | workspace VIs, finding your workspace RID | NOT YET RUN |
 
 Re-run all three after any re-import, and after any DLL change that touches
 signatures.
@@ -355,3 +357,36 @@ before archiving, or any real asset).
    empty → your workbook among the results.
 9. Cleanup: `nominal workbook archive.vi` (client + workbook RID), free
    workbook + template handles, `nominal client free.vi`.
+
+## Test 10 — Who am I (NOT YET RUN)
+
+The smallest test — and the recommended first call in any real LabVIEW
+application, as a cheap "is my token valid" probe before doing real work.
+
+1. `nominal client new.vi` — real token.
+2. `nominal user me.vi` — client → user handle.
+3. Verify: `user email` = your login email; `user display name` non-empty;
+   `user rid` starts with `ri.security.` and contains `.user.`;
+   `user org rid` contains `.org.`.
+4. Sanity: run `nominal user me.vi` with a garbage token (new client with
+   token `bad-token-123`) → expect error 8 (ApiError, HTTP 401) — proving
+   the probe actually detects bad credentials.
+5. Cleanup: free both user handles (if step 4 produced one — it should
+   not), both clients.
+
+## Test 11 — Workspace discovery (NOT YET RUN)
+
+Answers "what do I pass as workspace_rid to nominal client new.vi?" from
+inside LabVIEW instead of copying it out of the web app.
+
+1. `nominal client new.vi` — real token, workspace_rid EMPTY.
+2. `nominal workspace list.vi` — client → list handle + count (expect >= 1).
+3. For Loop over count: `nominal handle list get.vi` → per workspace read
+   `workspace display name` (is_present may be false — show the RID then)
+   and `workspace rid` → build a table.
+4. Pick your workspace''s RID from the table; `nominal client free.vi`, then
+   `nominal client new.vi` again passing that RID as workspace_rid.
+5. `nominal client workspace rid.vi` on the new client — is_present true,
+   equals what you passed.
+6. Cleanup: free the workspace handles inside the loop, the list, and the
+   client.
