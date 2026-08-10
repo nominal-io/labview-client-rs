@@ -9,6 +9,7 @@
 
 pub mod asset;
 pub mod client;
+pub mod dataset;
 pub mod error;
 pub mod handles;
 pub mod run;

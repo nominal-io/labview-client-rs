@@ -430,6 +430,243 @@ int32_t nominal_client_workspace_rid(int32_t client,
                                      bool *is_present);
 
 /*
+ Creates an empty dataset with the given name and (optional, may be null
+ or empty) description, writing the new dataset's handle to `out_dataset`.
+ Data is added by ingest, separately. Free with `nominal_dataset_free`.
+ For labels, properties, or a channel delimiter use the
+ `nominal_dataset_create_begin` staging flow instead.
+ */
+int32_t nominal_dataset_create(int32_t client,
+                               const char *name,
+                               const char *description,
+                               int32_t *out_dataset);
+
+/*
+ Fetches the dataset with the given RID, writing its handle to
+ `out_dataset`. Free with `nominal_dataset_free`.
+ */
+int32_t nominal_dataset_get(int32_t client, const char *rid, int32_t *out_dataset);
+
+/*
+ Lists all datasets (newest first), returning a handle list.
+
+ On success `*out_list` is a handle list of `*out_count` dataset handles —
+ read them with `nominal_handle_list_get` and free the list with
+ `nominal_handle_list_free`. Each dataset handle stays valid until passed
+ to `nominal_dataset_free`, independent of the list.
+ */
+int32_t nominal_dataset_list(int32_t client, int32_t *out_list, uint32_t *out_count);
+
+/*
+ Searches datasets, returning a handle list (see `nominal_dataset_list`
+ for ownership).
+
+ Filters may each be null or empty ("no filter"); the ones provided are
+ combined with AND:
+ - `search_text`: fuzzy full-text match on name and description
+ - `label`: exact label match
+ - `property_key` + `property_value`: property match (both or neither)
+ */
+int32_t nominal_dataset_search(int32_t client,
+                               const char *search_text,
+                               const char *label,
+                               const char *property_key,
+                               const char *property_value,
+                               int32_t *out_list,
+                               uint32_t *out_count);
+
+/*
+ Updates a dataset's name and/or description. Null or empty arguments
+ leave that field unchanged. Writes a handle to the updated dataset to
+ `out_dataset` (free with `nominal_dataset_free`). For labels or
+ properties use the `nominal_dataset_update_begin` staging flow instead.
+ */
+int32_t nominal_dataset_update(int32_t client,
+                               const char *rid,
+                               const char *name,
+                               const char *description,
+                               int32_t *out_dataset);
+
+/*
+ Archives a dataset (hidden from the UI, not deleted).
+ */
+int32_t nominal_dataset_archive(int32_t client, const char *rid);
+
+/*
+ Unarchives a dataset, restoring its visibility in the UI.
+ */
+int32_t nominal_dataset_unarchive(int32_t client, const char *rid);
+
+/*
+ Frees a dataset handle. Freeing twice returns an error.
+ */
+int32_t nominal_dataset_free(int32_t dataset);
+
+/*
+ Starts staging a dataset-create request with the (required) name. Add
+ optional fields with the `nominal_dataset_create_set_*` / `_add_*` calls,
+ then fire it with `nominal_dataset_create_commit`. Free with
+ `nominal_dataset_create_free` (commit does not free).
+ */
+int32_t nominal_dataset_create_begin(const char *name, int32_t *out_staging);
+
+/*
+ Sets the description on a staged dataset create (empty clears it).
+ */
+int32_t nominal_dataset_create_set_description(int32_t staging, const char *description);
+
+/*
+ Sets the channel-name delimiter on a staged dataset create (e.g. "." to
+ group channels like "engine.temp" into a prefix tree in the UI).
+ */
+int32_t nominal_dataset_create_set_channel_delimiter(int32_t staging, const char *delimiter);
+
+/*
+ Adds one label to a staged dataset create.
+ */
+int32_t nominal_dataset_create_add_label(int32_t staging, const char *label);
+
+/*
+ Sets one property on a staged dataset create (same key overwrites).
+ */
+int32_t nominal_dataset_create_set_property(int32_t staging, const char *key, const char *value);
+
+/*
+ Creates the staged dataset, writing the new dataset's handle to
+ `out_dataset` (free with `nominal_dataset_free`). The staging handle
+ stays valid — free it with `nominal_dataset_create_free`.
+ */
+int32_t nominal_dataset_create_commit(int32_t client, int32_t staging, int32_t *out_dataset);
+
+/*
+ Frees a dataset-create staging handle. Freeing twice returns an error.
+ */
+int32_t nominal_dataset_create_free(int32_t staging);
+
+/*
+ Starts staging a dataset update. Only fields set via the
+ `nominal_dataset_update_set_*` / `_add_*` calls are changed at commit;
+ the rest remain untouched. Free with `nominal_dataset_update_free`.
+ */
+int32_t nominal_dataset_update_begin(int32_t *out_staging);
+
+/*
+ Stages a new name.
+ */
+int32_t nominal_dataset_update_set_name(int32_t staging, const char *name);
+
+/*
+ Stages a new description (empty clears the description).
+ */
+int32_t nominal_dataset_update_set_description(int32_t staging, const char *description);
+
+/*
+ Adds one label to the staged update. NOTE: touching labels at all means
+ the commit REPLACES the dataset's entire label set with exactly the
+ labels accumulated here (upstream semantics) — to keep existing labels,
+ add them too.
+ */
+int32_t nominal_dataset_update_add_label(int32_t staging, const char *label);
+
+/*
+ Sets one property on the staged update (same key overwrites). NOTE: same
+ replace semantics as labels — touching properties at all means the commit
+ replaces the dataset's entire property map with the ones accumulated
+ here.
+ */
+int32_t nominal_dataset_update_set_property(int32_t staging, const char *key, const char *value);
+
+/*
+ Applies the staged update to the dataset with the given RID, writing a
+ handle to the updated dataset to `out_dataset` (free with
+ `nominal_dataset_free`). At least one field must have been staged. The
+ staging handle stays valid — free it with `nominal_dataset_update_free`.
+ */
+int32_t nominal_dataset_update_commit(int32_t client,
+                                      const char *rid,
+                                      int32_t staging,
+                                      int32_t *out_dataset);
+
+/*
+ Frees a dataset-update staging handle. Freeing twice returns an error.
+ */
+int32_t nominal_dataset_update_free(int32_t staging);
+
+/*
+ Writes the dataset's RID into `buf`, storing the byte count needed in
+ `out_needed`.
+ */
+int32_t nominal_dataset_rid(int32_t dataset, char *buf, uint32_t cap, uint32_t *out_needed);
+
+/*
+ Writes the dataset's name into `buf`, storing the byte count needed in
+ `out_needed`.
+ */
+int32_t nominal_dataset_name(int32_t dataset, char *buf, uint32_t cap, uint32_t *out_needed);
+
+/*
+ Writes the dataset's description into `buf`, and whether one is set into
+ `is_present` (an absent description reports 0 bytes needed).
+ */
+int32_t nominal_dataset_description(int32_t dataset,
+                                    char *buf,
+                                    uint32_t cap,
+                                    uint32_t *out_needed,
+                                    bool *is_present);
+
+/*
+ Writes the URL for viewing this dataset in the Nominal web app into
+ `buf`, storing the byte count needed in `out_needed`.
+ */
+int32_t nominal_dataset_url(int32_t dataset, char *buf, uint32_t cap, uint32_t *out_needed);
+
+/*
+ Writes the dataset's creation (first-ingest) time to `out_millis` as
+ `f64` Unix milliseconds (UTC).
+ */
+int32_t nominal_dataset_created_at(int32_t dataset, double *out_millis);
+
+/*
+ Stores the number of properties on the dataset in `out_count`.
+ */
+int32_t nominal_dataset_property_count(int32_t dataset, uint32_t *out_count);
+
+/*
+ Writes the key of the property at `index` (0-based, sorted-key order)
+ into `buf`, storing the byte count needed in `out_needed`.
+ */
+int32_t nominal_dataset_property_key_at(int32_t dataset,
+                                        int32_t index,
+                                        char *buf,
+                                        uint32_t cap,
+                                        uint32_t *out_needed);
+
+/*
+ Writes the value of the property at `index` (0-based, sorted-key order)
+ into `buf`, storing the byte count needed in `out_needed`.
+ */
+int32_t nominal_dataset_property_value_at(int32_t dataset,
+                                          int32_t index,
+                                          char *buf,
+                                          uint32_t cap,
+                                          uint32_t *out_needed);
+
+/*
+ Stores the number of labels on the dataset in `out_count`.
+ */
+int32_t nominal_dataset_label_count(int32_t dataset, uint32_t *out_count);
+
+/*
+ Writes the label at `index` (0-based) into `buf`, storing the byte count
+ needed in `out_needed`.
+ */
+int32_t nominal_dataset_label_at(int32_t dataset,
+                                 int32_t index,
+                                 char *buf,
+                                 uint32_t cap,
+                                 uint32_t *out_needed);
+
+/*
  Writes the most recent error message into `buf` (capacity `cap`, in
  bytes) and stores the byte count needed (excluding the null terminator)
  in `out_needed`. Call after any function returns a non-zero code.

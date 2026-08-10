@@ -8,7 +8,8 @@ run. Status as of 2026-08-08:
 | 1. Offline client lifecycle | handle/error/string machinery, no network | PASSED 2026-08-07 |
 | 2. Real API list + loop | auth, search, handle lists, getters at scale | PASSED 2026-08-07 |
 | 3. Staged create/update | staging-handle VIs, labels/properties, archive | PASSED 2026-08-08 |
-| 4. Run lifecycle | run VIs, f64 timestamps, run-number search, asset link | NOT YET RUN |
+| 4. Run lifecycle | run VIs, f64 timestamps, run-number search, asset link | PASSED 2026-08-08 |
+| 5. Dataset lifecycle | dataset VIs, channel delimiter, catalog endpoints | NOT YET RUN |
 
 Re-run all three after any re-import, and after any DLL change that touches
 signatures.
@@ -183,4 +184,32 @@ Cleanup:
 15. `nominal run archive.vi` — client + run RID.
 16. `nominal asset archive.vi` — client + asset RID (from step 2).
 17. `nominal run free.vi` on both run handles, `nominal asset free.vi`,
+    `nominal client free.vi`.
+
+## Test 5 — Dataset lifecycle (NOT YET RUN)
+
+Same shape as Test 3, against the dataset VIs. Creates a REAL (empty)
+dataset; the archive step hides it. Datasets have no timestamps-in and no
+data-source getters — the new ground is the channel delimiter and the
+catalog endpoints behind the scenes.
+
+1. `nominal client new.vi` — real token.
+2. `nominal dataset create begin.vi` — name `labview-ffi-dataset-1` →
+   staging.
+3. `nominal dataset create set description.vi` — any text.
+4. `nominal dataset create set channel delimiter.vi` — `.` (groups channel
+   names like `engine.temp` into a tree in the UI).
+5. `add label` `labview`; `set property` key `phase` value `smoke-test`.
+6. `nominal dataset create commit.vi` → dataset handle;
+   `nominal dataset create free.vi`.
+7. Verify: `dataset name`, `description` (is_present true), `label count` =
+   1, `property` key/value, `created at` recent, `dataset rid` on a wire,
+   `dataset url` — optional browser check (goes to the data-sources page).
+8. `nominal dataset search.vi` — search_text `labview-ffi`, other filters
+   empty → expect your dataset among the results (loop
+   `nominal handle list get` → `dataset rid`, compare).
+9. Staged update: `update begin` → `add label` `updated` → `update commit`
+   (client, RID, staging) → on the new handle `label count` = 1, label =
+   `updated` (replace semantics). `update free`.
+10. Cleanup: `nominal dataset archive.vi`, free both dataset handles,
     `nominal client free.vi`.

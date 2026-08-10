@@ -1,4 +1,4 @@
-//! Tier 2 for runs: request-building + response-parsing + FFI conversion
+﻿//! Tier 2 for runs: request-building + response-parsing + FFI conversion
 //! against a wiremock server speaking the Conjure wire format. Mirrors the
 //! asset suite; timestamp marshaling (f64 Unix ms <-> UtcTimestamp) is the
 //! run-specific ground covered here.
@@ -190,6 +190,7 @@ fn create_run_marshals_every_field() {
 
 #[test]
 fn create_rejects_non_finite_start() {
+    let _guard = common::message_lock();
     let server = start_server();
     let client = new_client(&server);
 
@@ -211,6 +212,7 @@ fn create_rejects_non_finite_start() {
 
 #[test]
 fn staged_create_sends_everything() {
+    let _guard = common::message_lock();
     let server = start_server();
     mount(
         &server,
@@ -267,6 +269,7 @@ fn staged_create_sends_everything() {
 
 #[test]
 fn staged_create_rejects_bad_asset_rid_at_commit() {
+    let _guard = common::message_lock();
     // The RID is validated upstream at commit (request-build time) — a bad
     // one must fail with InvalidArgument before any request is sent.
     let server = start_server();
