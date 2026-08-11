@@ -931,6 +931,18 @@ int32_t nominal_rid_list_add(int32_t list, const char *rid);
 int32_t nominal_rid_list_free(int32_t list);
 
 /*
+ Debug aid: writes a report of every handle type that currently has open
+ (un-freed) handles into `buf`, one line per type —
+ `AssetHandle: 2 (17, 24)` — sorted by type name, with the open handle
+ values in parentheses. Writes an empty string when nothing is open, so
+ "needed == 0" at the end of a program means every handle was freed.
+ Same buffer convention as every other string getter. Handle values are
+ unique across all types (one shared counter), so a reported value
+ identifies the leaked handle unambiguously.
+ */
+int32_t nominal_debug_open_handles(char *buf, uint32_t cap, uint32_t *out_needed);
+
+/*
  Starts staging options for a CSV or Parquet ingest. Set the (required)
  timestamp spec with one of the `nominal_ingest_tabular_set_timestamp_*`
  calls, add optional settings, then fire it with `nominal_ingest_csv` or
