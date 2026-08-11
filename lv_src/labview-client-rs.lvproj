@@ -15,6 +15,7 @@
 		<Property Name="specify.custom.address" Type="Bool">false</Property>
 		<Item Name="dev" Type="Folder">
 			<Item Name="scripting.vi" Type="VI" URL="../dev/scripting.vi"/>
+			<Item Name="handle tracker.vi" Type="VI" URL="../dev/handle tracker.vi"/>
 		</Item>
 		<Item Name="tests" Type="Folder">
 			<Item Name="01 - Offline client lifecycle.vi" Type="VI" URL="../tests/01 - Offline client lifecycle.vi"/>

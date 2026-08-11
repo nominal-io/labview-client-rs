@@ -101,6 +101,7 @@
 	<Item Name="nominal dataset update set property.vi" Type="VI" URL="../VIs/nominal dataset update set property.vi"/>
 	<Item Name="nominal dataset update.vi" Type="VI" URL="../VIs/nominal dataset update.vi"/>
 	<Item Name="nominal dataset url.vi" Type="VI" URL="../VIs/nominal dataset url.vi"/>
+	<Item Name="nominal debug open handles.vi" Type="VI" URL="../VIs/nominal debug open handles.vi"/>
 	<Item Name="nominal handle list count.vi" Type="VI" URL="../VIs/nominal handle list count.vi"/>
 	<Item Name="nominal handle list free.vi" Type="VI" URL="../VIs/nominal handle list free.vi"/>
 	<Item Name="nominal handle list get.vi" Type="VI" URL="../VIs/nominal handle list get.vi"/>
