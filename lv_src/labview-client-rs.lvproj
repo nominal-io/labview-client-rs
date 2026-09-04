@@ -27,14 +27,21 @@
 			<Item Name="01 - Offline client lifecycle.vi" Type="VI" URL="../tests/01 - Offline client lifecycle.vi"/>
 			<Item Name="01 LV - Offline client lifecycle.vi" Type="VI" URL="../tests/01 LV - Offline client lifecycle.vi"/>
 			<Item Name="02 - Real API list + loop.vi" Type="VI" URL="../tests/02 - Real API list + loop.vi"/>
+			<Item Name="02 LV - Real API list + loop.vi" Type="VI" URL="../tests/02 LV - Real API list + loop.vi"/>
 			<Item Name="03 - Staged create-verify-staged update-archive.vi" Type="VI" URL="../tests/03 - Staged create-verify-staged update-archive.vi"/>
+			<Item Name="03 LV - Staged create-verify-staged update-archive.vi" Type="VI" URL="../tests/03 LV - Staged create-verify-staged update-archive.vi"/>
 			<Item Name="04 - Run lifecycle.vi" Type="VI" URL="../tests/04 - Run lifecycle.vi"/>
+			<Item Name="04 LV - Run lifecycle.vi" Type="VI" URL="../tests/04 LV - Run lifecycle.vi"/>
 			<Item Name="05 - Dataset Lifecycle.vi" Type="VI" URL="../tests/05 - Dataset Lifecycle.vi"/>
+			<Item Name="05 LV - Dataset Lifecycle.vi" Type="VI" URL="../tests/05 LV - Dataset Lifecycle.vi"/>
 			<Item Name="06 - Video Lifecycle.vi" Type="VI" URL="../tests/06 - Video Lifecycle.vi"/>
+			<Item Name="06 LV - Video Lifecycle.vi" Type="VI" URL="../tests/06 LV - Video Lifecycle.vi"/>
 			<Item Name="07 - Channel metadata.vi" Type="VI" URL="../tests/07 - Channel metadata.vi"/>
+			<Item Name="07 LV - Channel metadata.vi" Type="VI" URL="../tests/07 LV - Channel metadata.vi"/>
 			<Item Name="08 - CSV Ingest.vi" Type="VI" URL="../tests/08 - CSV Ingest.vi"/>
 			<Item Name="09 - Workbook from template.vi" Type="VI" URL="../tests/09 - Workbook from template.vi"/>
 			<Item Name="10 - Who am I.vi" Type="VI" URL="../tests/10 - Who am I.vi"/>
+			<Item Name="10 LV - Who am I.vi" Type="VI" URL="../tests/10 LV - Who am I.vi"/>
 			<Item Name="11 - Workspace discovery.vi" Type="VI" URL="../tests/11 - Workspace discovery.vi"/>
 			<Item Name="labview-tests.md" Type="Document" URL="../tests/labview-tests.md"/>
 			<Item Name="test.csv" Type="Document" URL="../tests/test.csv"/>
@@ -64,6 +71,8 @@
 		<Item Name="WorkbookCreateStaging.lvclass" Type="LVClass" URL="../client/WorkbookCreateStaging/WorkbookCreateStaging.lvclass"/>
 		<Item Name="Workspace.lvclass" Type="LVClass" URL="../client/Workspace/Workspace.lvclass"/>
 		<Item Name="Asset.lvclass" Type="LVClass" URL="../client/Asset/Asset.lvclass"/>
+		<Item Name="List.lvclass" Type="LVClass" URL="../client/List/List.lvclass"/>
+		<Item Name="08 LV - CSV Ingest.vi" Type="VI" URL="../tests/08 LV - CSV Ingest.vi"/>
 		<Item Name="Dependencies" Type="Dependencies">
 			<Item Name="vi.lib" Type="Folder">
 				<Item Name="Error Cluster From Error Code.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/Error Cluster From Error Code.vi"/>
@@ -166,6 +175,7 @@
 				<Item Name="Text-Based VI Icon.lvlib" Type="Library" URL="/&lt;vilib&gt;/LabVIEW Icon API/Set Text Icon/Text-Based VI Icon.lvlib"/>
 				<Item Name="Space Constant.vi" Type="VI" URL="/&lt;vilib&gt;/dlg_ctls.llb/Space Constant.vi"/>
 				<Item Name="Draw Rectangle.vi" Type="VI" URL="/&lt;vilib&gt;/picture/picture.llb/Draw Rectangle.vi"/>
+				<Item Name="Stall Data Flow.vim" Type="VI" URL="/&lt;vilib&gt;/Utility/Stall Data Flow.vim"/>
 			</Item>
 			<Item Name="nominalClient_64.dll" Type="Document" URL="../bin/nominalClient_64.dll"/>
 			<Item Name="zzRemove (no error).ctl" Type="VI" URL="/&lt;resource&gt;/plugins/PopupMenus/edit time panel and diagram/zzRemove (no error).llb/zzRemove (no error).ctl"/>
