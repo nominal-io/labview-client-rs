@@ -73,6 +73,7 @@
 		<Item Name="Workspace.lvclass" Type="LVClass" URL="../client/Workspace/Workspace.lvclass"/>
 		<Item Name="Asset.lvclass" Type="LVClass" URL="../client/Asset/Asset.lvclass"/>
 		<Item Name="List.lvclass" Type="LVClass" URL="../client/List/List.lvclass"/>
+		<Item Name="09 LV - Workbook from template.vi" Type="VI" URL="../tests/09 LV - Workbook from template.vi"/>
 		<Item Name="Dependencies" Type="Dependencies">
 			<Item Name="vi.lib" Type="Folder">
 				<Item Name="Error Cluster From Error Code.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/Error Cluster From Error Code.vi"/>
