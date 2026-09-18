@@ -74,7 +74,7 @@ needed-bytes out-param.
 |---|---|
 | `crates/ffi/` | The Rust FFI crate — one source file per resource type (asset, run, dataset, ingest, …), mirroring the `nominal` crate's layout |
 | `lv_src/bin/` | Built shared libraries (`nominalClient_64.dll`, `_32.dll`, `_64.so`) + the generated header |
-| `lv_src/client/` | The LabVIEW library: wizard-generated VIs plus wrapper subVIs |
+| `lv_src/client/` | The LabVIEW library: wizard-generated VIs, wrapper subVIs, and the higher-level class-based API |
 | `lv_src/tests/` | LabVIEW-side test VIs exercising full resource lifecycles |
 | `justfile` | All build entry points — nobody runs raw `cargo` commands |
 | `CLAUDE.md` | The full design document: type-conversion rules, error handling, naming conventions, testing strategy |
@@ -91,12 +91,43 @@ just build-linux    # Linux x64  → lv_src/bin/nominalClient_64.so
 just test           # marshaling + mocked-HTTP tests, no network needed
 ```
 
-CI rebuilds all targets on every push, and a scheduled workflow bumps the
-`nominal` dependency daily and runs the test suite — that failing loudly is
-the early-warning system this project exists to provide.
-
 Regenerating the LabVIEW VIs from a new DLL/header is a deliberate manual
 step (Tools → Import → Shared Library in LabVIEW), done by the maintainer.
+
+## GitHub Workflows
+
+- **`ci.yml`** (every push to `main`, every PR) — runs lint, tests, and both
+  platform builds:
+  - `lint` — `just lint` (fmt + clippy), then regenerates the cbindgen header
+    and diffs it against the committed copy — catches anyone editing an FFI
+    signature without running `just header`, which would otherwise leave the
+    committed header (and what LabVIEW imports) silently out of sync.
+  - `test` — `just test`, tiers 1+2 only (marshaling + mocked HTTP); tier-3
+    integration tests never run per-PR, only on the scheduled workflow below.
+  - `build-windows` — builds x64 and x86, the primary LabVIEW deployment
+    targets, and uploads them as artifacts. Installs NASM
+    (`ilammy/setup-nasm`) first, because `aws-lc-sys` (rustls's crypto
+    backend, pulled in transitively via `nominal`) needs it to assemble its
+    i686 code — the 32-bit build fails without it.
+  - `build-linux` — pinned to `ubuntu-22.04`, not `-latest`, because the
+    built `.so` requires the target machine's glibc to be at least the build
+    machine's; a newer runner would silently raise that floor and could break
+    older targets such as NI Linux RT.
+  - Across every job, `cbindgen` is installed as a CLI tool
+    (`taiki-e/install-action`) rather than added to `Cargo.toml` — it's
+    MPL-2.0 licensed, which org policy prohibits in the dependency tree, so
+    it has to stay an external tool that never touches the lockfile.
+- **`nominal-bump-check.yml`** (daily cron + manual `workflow_dispatch`) —
+  runs `cargo update -p nominal` and the test suite against whatever version
+  that resolves to. This is the project's core value proposition: catching
+  upstream `nominal` API drift as a scheduled CI failure instead of a runtime
+  surprise inside LabVIEW.
+  - Tests run even when `Cargo.lock` didn't move — a yanked or newly-broken
+    transitive dependency should still fail loudly.
+  - If the lockfile changed and tests pass, it opens a PR bumping
+    `Cargo.lock`; if tests fail, the workflow itself fails visibly rather
+    than opening a PR — a red run *is* the signal this project exists to
+    provide.
 
 ## Design rules
 
