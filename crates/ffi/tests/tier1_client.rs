@@ -5,7 +5,9 @@ mod common;
 
 use common::{cstr, last_error, read_string};
 use nominal_ffi::client::{
-    nominal_client_base_url, nominal_client_free, nominal_client_new, nominal_client_workspace_rid,
+    nominal_client_base_url, nominal_client_free, nominal_client_new,
+    nominal_client_new_from_profile, nominal_client_new_from_profile_env,
+    nominal_client_workspace_rid,
 };
 use nominal_ffi::error::NominalErrorCode;
 
@@ -158,6 +160,49 @@ fn null_out_param_is_rejected() {
         std::ptr::null_mut(),
     );
     assert_eq!(code, NominalErrorCode::NullArgument as i32);
+}
+
+// The profile-constructor happy paths need a real config file in the user's
+// home directory (the upstream loader reads only the fixed default path, and
+// planting one there from a test would clobber the developer's own config),
+// so tier 1 covers the error paths and the happy path lives in the manual
+// LabVIEW test plan.
+
+#[test]
+fn from_profile_with_unknown_profile_fails() {
+    let _guard = common::message_lock();
+    // Whether or not a config file exists, this profile name can't be in it.
+    let name = cstr("ffi-test-profile-that-cannot-exist-4f9a2b");
+    let mut handle = 0i32;
+    let code = nominal_client_new_from_profile(name.as_ptr(), &mut handle);
+    assert_ne!(code, 0);
+    assert!(!last_error().is_empty());
+
+    let empty = cstr("");
+    assert_eq!(
+        nominal_client_new_from_profile(empty.as_ptr(), &mut handle),
+        NominalErrorCode::InvalidArgument as i32
+    );
+    assert_eq!(
+        nominal_client_new_from_profile(name.as_ptr(), std::ptr::null_mut()),
+        NominalErrorCode::NullArgument as i32
+    );
+}
+
+#[test]
+fn from_profile_env_without_env_var_fails() {
+    let _guard = common::message_lock();
+    // Only this test touches NOMINAL_PROFILE, and the message lock already
+    // serializes it against the other error-path tests.
+    std::env::remove_var("NOMINAL_PROFILE");
+    let mut handle = 0i32;
+    let code = nominal_client_new_from_profile_env(&mut handle);
+    assert_ne!(code, 0);
+    assert!(
+        last_error().contains("NOMINAL_PROFILE"),
+        "got: {}",
+        last_error()
+    );
 }
 
 #[test]

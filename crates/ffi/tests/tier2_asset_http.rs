@@ -1002,3 +1002,75 @@ fn asset_calls_reject_invalid_client_handle() {
         NominalErrorCode::InvalidHandle as i32
     );
 }
+
+use nominal_ffi::asset::nominal_asset_get_batch;
+use nominal_ffi::handles::{nominal_rid_list_add, nominal_rid_list_begin, nominal_rid_list_free};
+
+#[test]
+fn get_batch_returns_handles_sorted_by_rid() {
+    let rid_b = ASSET_RID.replace("0001", "0005");
+    let server = start_server();
+    // The request must carry BOTH rids in one call (sorted upstream through
+    // a BTreeSet). Respond out of order to prove index 0 is sorted-first.
+    mount(
+        &server,
+        Mock::given(method("POST"))
+            .and(path("/scout/v1/asset/multiple"))
+            .and(body_partial_json(json!([ASSET_RID, rid_b])))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                &rid_b: minimal_asset_json(&rid_b, "Bravo"),
+                ASSET_RID: minimal_asset_json(ASSET_RID, "Alpha"),
+            }))),
+    );
+    let client = new_client(&server);
+
+    let mut rid_list = 0i32;
+    assert_eq!(nominal_rid_list_begin(&mut rid_list), 0);
+    for rid in [ASSET_RID, rid_b.as_str()] {
+        let rid = cstr(rid);
+        assert_eq!(nominal_rid_list_add(rid_list, rid.as_ptr()), 0);
+    }
+
+    let mut list = 0i32;
+    let mut count = 0u32;
+    let code = nominal_asset_get_batch(client, rid_list, &mut list, &mut count);
+    assert_eq!(code, 0, "get_batch failed: {}", last_error());
+    assert_eq!(count, 2);
+
+    let mut handle = 0i32;
+    assert_eq!(nominal_handle_list_get(list, 0, &mut handle), 0);
+    let rid0 = read_string(|b, c, n| nominal_asset_rid(handle, b, c, n)).unwrap();
+    assert_eq!(rid0, ASSET_RID, "index 0 is the lexically-smallest RID");
+    nominal_asset_free(handle);
+    assert_eq!(nominal_handle_list_get(list, 1, &mut handle), 0);
+    let rid1 = read_string(|b, c, n| nominal_asset_rid(handle, b, c, n)).unwrap();
+    assert_eq!(rid1, rid_b);
+    nominal_asset_free(handle);
+
+    assert_eq!(nominal_handle_list_free(list), 0);
+    assert_eq!(nominal_rid_list_free(rid_list), 0, "batch does not consume");
+    nominal_client_free(client);
+}
+
+#[test]
+fn get_batch_invalid_rid_fails_before_any_request() {
+    let _guard = common::message_lock();
+    // No mocks mounted: a request would fail differently than InvalidArgument.
+    let server = start_server();
+    let client = new_client(&server);
+
+    let mut rid_list = 0i32;
+    assert_eq!(nominal_rid_list_begin(&mut rid_list), 0);
+    let bad = cstr("not-a-rid");
+    assert_eq!(nominal_rid_list_add(rid_list, bad.as_ptr()), 0);
+
+    let mut list = 0i32;
+    let mut count = 0u32;
+    assert_eq!(
+        nominal_asset_get_batch(client, rid_list, &mut list, &mut count),
+        NominalErrorCode::InvalidArgument as i32
+    );
+
+    nominal_rid_list_free(rid_list);
+    nominal_client_free(client);
+}

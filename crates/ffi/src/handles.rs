@@ -9,7 +9,29 @@
 //! macro. Handle `0` is reserved and never issued, so it doubles as
 //! "null"/"absent". Handles are process-global and thread-safe.
 
+use std::os::raw::c_char;
+use std::sync::Mutex;
+
 use crate::error::{fail, guard, NominalErrorCode};
+use crate::strings::{read_required_str, write_str_field};
+
+/// One handle registry's entry in the debug directory: its type name and a
+/// fn returning its currently-open handle values.
+type RegistryEntry = (&'static str, fn() -> Vec<i32>);
+
+/// Global directory of every handle registry that has ever issued a handle.
+/// Populated once per registry by the `Lazy` map initializer inside
+/// [`handle_registry!`], read by `nominal_debug_open_handles`. A registry
+/// that was never touched is absent — it cannot have leaked anything.
+static REGISTRY_DIRECTORY: once_cell::sync::Lazy<Mutex<Vec<RegistryEntry>>> =
+    once_cell::sync::Lazy::new(|| Mutex::new(Vec::new()));
+
+pub(crate) fn register_registry(name: &'static str, open_handles: fn() -> Vec<i32>) {
+    REGISTRY_DIRECTORY
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .push((name, open_handles));
+}
 
 /// Generates a handle registry for one resource type:
 /// a `Lazy<Mutex<HashMap<i32, Arc<T>>>>`, a shared `AtomicI32` counter, and
@@ -32,9 +54,25 @@ macro_rules! handle_registry {
                 static MAP: once_cell::sync::Lazy<
                     std::sync::Mutex<std::collections::HashMap<i32, std::sync::Arc<$ty>>>,
                 > = once_cell::sync::Lazy::new(|| {
+                    // First touch: announce this registry to the debug
+                    // directory so `nominal_debug_open_handles` covers it
+                    // (no per-call cost — this closure runs exactly once).
+                    crate::handles::register_registry(stringify!($name), $name::open_handles);
                     std::sync::Mutex::new(std::collections::HashMap::new())
                 });
                 &MAP
+            }
+
+            /// Currently-open handle values, sorted — for the debug report.
+            fn open_handles() -> Vec<i32> {
+                let mut handles: Vec<i32> = Self::map()
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .keys()
+                    .copied()
+                    .collect();
+                handles.sort_unstable();
+                handles
             }
 
             /// Store `value` and return its new handle. Never returns 0.
@@ -180,6 +218,113 @@ pub extern "C" fn nominal_handle_list_free(list: i32) -> i32 {
     })
 }
 
+// A staging list of RID strings, shared by every `_get_batch` function — the
+// input-side counterpart of the handle list above. A C string array (char**)
+// has no LabVIEW representation, so RIDs accumulate one call at a time.
+handle_registry!(RidListHandle, Mutex<Vec<String>>);
+
+/// Snapshot of the RIDs staged on `handle` — used by the `_get_batch`
+/// functions after their own `lookup_handle!`.
+pub(crate) fn rid_list_snapshot(list: &Mutex<Vec<String>>) -> Vec<String> {
+    list.lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .clone()
+}
+
+/// Starts staging a list of RIDs for a `_get_batch` call. Add RIDs one at a
+/// time with `nominal_rid_list_add`, pass the handle to any `_get_batch`
+/// function (it is not consumed — one list can serve several calls), and
+/// free it with `nominal_rid_list_free`.
+#[no_mangle]
+pub extern "C" fn nominal_rid_list_begin(out_list: *mut i32) -> i32 {
+    guard(|| {
+        if out_list.is_null() {
+            return fail(NominalErrorCode::NullArgument, "out_list must not be null");
+        }
+        // SAFETY: out_list checked non-null above; caller owns it.
+        unsafe { *out_list = RidListHandle::insert(Mutex::new(Vec::new())) };
+        0
+    })
+}
+
+/// Appends one RID to a staged RID list (repeatable; duplicates are kept).
+#[no_mangle]
+pub extern "C" fn nominal_rid_list_add(list: i32, rid: *const c_char) -> i32 {
+    guard(|| {
+        let list = lookup_handle!(RidListHandle, list);
+        let rid = match read_required_str(rid, "rid") {
+            Ok(value) => value,
+            Err(code) => return code,
+        };
+        if rid.is_empty() {
+            return fail(NominalErrorCode::InvalidArgument, "rid must not be empty");
+        }
+        list.lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .push(rid);
+        0
+    })
+}
+
+/// Frees a RID-list staging handle. Freeing twice returns an error.
+#[no_mangle]
+pub extern "C" fn nominal_rid_list_free(list: i32) -> i32 {
+    guard(|| {
+        if RidListHandle::remove(list) {
+            0
+        } else {
+            fail(
+                NominalErrorCode::InvalidHandle,
+                format!("invalid rid list: {list}"),
+            )
+        }
+    })
+}
+
+/// Debug aid: writes a report of every handle type that currently has open
+/// (un-freed) handles into `buf`, one line per type —
+/// `AssetHandle: 2 (17, 24)` — sorted by type name, with the open handle
+/// values in parentheses. Writes an empty string when nothing is open, so
+/// "needed == 0" at the end of a program means every handle was freed.
+/// Same buffer convention as every other string getter. Handle values are
+/// unique across all types (one shared counter), so a reported value
+/// identifies the leaked handle unambiguously.
+#[no_mangle]
+pub extern "C" fn nominal_debug_open_handles(
+    buf: *mut c_char,
+    cap: u32,
+    out_needed: *mut u32,
+) -> i32 {
+    guard(|| {
+        // Snapshot the directory, then drop its lock BEFORE calling into the
+        // per-registry enumerators — each of those takes its own map lock,
+        // and a registry's first-touch initializer takes the directory lock.
+        let directory: Vec<RegistryEntry> = REGISTRY_DIRECTORY
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone();
+
+        let mut lines: Vec<String> = directory
+            .into_iter()
+            .filter_map(|(name, open_handles)| {
+                let handles = open_handles();
+                if handles.is_empty() {
+                    return None;
+                }
+                let values = handles
+                    .iter()
+                    .map(i32::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                Some(format!("{}: {} ({})", name, handles.len(), values))
+            })
+            .collect();
+        // Directory order is first-touch order — sort for a stable report.
+        lines.sort_unstable();
+        write_str_field(&lines.join("\n"), buf, cap, out_needed)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -213,6 +358,96 @@ mod tests {
         assert!(OtherHandle::get(a).is_none());
         assert!(!OtherHandle::remove(a), "cross-registry free must fail");
         assert!(OtherHandle::remove(b));
+    }
+
+    /// Reads the full debug report via the standard two-call size-query
+    /// dance (null buf for the size, then a right-sized buffer). Retries on
+    /// BufferTooSmall: the report is process-global, so a parallel test can
+    /// grow it between the size query and the fill.
+    fn read_debug_report() -> String {
+        loop {
+            let mut needed = 0u32;
+            assert_eq!(
+                nominal_debug_open_handles(std::ptr::null_mut(), 0, &mut needed),
+                0
+            );
+            let mut buf = vec![0u8; needed as usize + 1];
+            let code =
+                nominal_debug_open_handles(buf.as_mut_ptr().cast(), buf.len() as u32, &mut needed);
+            if code == NominalErrorCode::BufferTooSmall as i32 {
+                continue;
+            }
+            assert_eq!(code, 0);
+            buf.truncate(needed as usize);
+            return String::from_utf8(buf).expect("report is UTF-8");
+        }
+    }
+
+    // Used by no other test — the report is process-global and unit tests
+    // run in parallel, so assertions on shared registries would race.
+    handle_registry!(DebugProbeHandle, u8);
+
+    #[test]
+    fn debug_report_tracks_open_and_freed_handles() {
+        // The retry path sets a BufferTooSmall message — hold the lock like
+        // every other test that can touch LAST_ERROR.
+        let _guard = crate::error::test_message_lock();
+        let first = DebugProbeHandle::insert(1);
+        let second = DebugProbeHandle::insert(2);
+        assert_eq!(*DebugProbeHandle::get(second).unwrap(), 2);
+
+        // Both open: the probe line lists exactly these two, sorted.
+        let report = read_debug_report();
+        let expected = format!("DebugProbeHandle: 2 ({first}, {second})");
+        assert!(
+            report.lines().any(|line| line == expected),
+            "expected line {expected:?} in report:\n{report}"
+        );
+
+        // One freed: the line shrinks to the survivor.
+        assert!(DebugProbeHandle::remove(first));
+        let report = read_debug_report();
+        let expected = format!("DebugProbeHandle: 1 ({second})");
+        assert!(
+            report.lines().any(|line| line == expected),
+            "expected line {expected:?} in report:\n{report}"
+        );
+
+        // All freed: the type disappears from the report entirely.
+        assert!(DebugProbeHandle::remove(second));
+        let report = read_debug_report();
+        assert!(
+            !report.contains("DebugProbeHandle"),
+            "freed type must vanish from report:\n{report}"
+        );
+    }
+
+    #[test]
+    fn rid_list_round_trip() {
+        let _guard = crate::error::test_message_lock();
+        let mut list = 0i32;
+        assert_eq!(nominal_rid_list_begin(&mut list), 0);
+
+        let rid = std::ffi::CString::new("ri.scout.x.asset.1").unwrap();
+        assert_eq!(nominal_rid_list_add(list, rid.as_ptr()), 0);
+        let empty = std::ffi::CString::new("").unwrap();
+        assert_eq!(
+            nominal_rid_list_add(list, empty.as_ptr()),
+            NominalErrorCode::InvalidArgument as i32
+        );
+
+        let staged = RidListHandle::get(list).unwrap();
+        assert_eq!(rid_list_snapshot(&staged), vec!["ri.scout.x.asset.1"]);
+
+        assert_eq!(nominal_rid_list_free(list), 0);
+        assert_eq!(
+            nominal_rid_list_free(list),
+            NominalErrorCode::InvalidHandle as i32
+        );
+        assert_eq!(
+            nominal_rid_list_add(list, rid.as_ptr()),
+            NominalErrorCode::InvalidHandle as i32
+        );
     }
 
     #[test]

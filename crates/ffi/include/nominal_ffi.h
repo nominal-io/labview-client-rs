@@ -459,6 +459,19 @@ int32_t nominal_asset_data_source_rid_at(int32_t asset,
 int32_t nominal_asset_data_source_type_at(int32_t asset, int32_t index, int32_t *out_type);
 
 /*
+ Fetches every asset named in the `rid_list` staging handle (see
+ `nominal_rid_list_begin`) in one API call, writing a handle list to
+ `out_list` and its size to `out_count` (same ownership rules as the
+ `_list`/`_search` functions). RIDs not found are omitted, and results
+ arrive sorted by RID — NOT in input order — so match entries by
+ `nominal_asset_rid`, never by index. The RID list is not consumed.
+ */
+int32_t nominal_asset_get_batch(int32_t client,
+                                int32_t rid_list,
+                                int32_t *out_list,
+                                uint32_t *out_count);
+
+/*
  Lists every channel on a data source (dataset, video, or connection RID),
  returning a handle list.
 
@@ -576,6 +589,26 @@ int32_t nominal_client_new(const char *token,
                            const char *workspace_rid,
                            const char *base_url,
                            int32_t *out_client);
+
+/*
+ Creates a client from the named profile in the Nominal config file
+ (`~/.config/nominal/config.yml`, as written by the `nominal` CLI's auth
+ flow), writing its handle to `out_client`. Secondary constructor —
+ `nominal_client_new` with an explicit token is the primary path. Fails
+ if the config file is missing or the profile name isn't in it.
+
+ Free with `nominal_client_free`.
+ */
+int32_t nominal_client_new_from_profile(const char *name, int32_t *out_client);
+
+/*
+ Creates a client from the profile named by the `NOMINAL_PROFILE`
+ environment variable — `nominal_client_new_from_profile` with the name
+ taken from the environment. Fails if the variable is unset.
+
+ Free with `nominal_client_free`.
+ */
+int32_t nominal_client_new_from_profile_env(int32_t *out_client);
 
 /*
  Frees a client handle. The handle is invalid afterwards; freeing twice
@@ -839,6 +872,19 @@ int32_t nominal_dataset_label_at(int32_t dataset,
                                  uint32_t *out_needed);
 
 /*
+ Fetches every dataset named in the `rid_list` staging handle (see
+ `nominal_rid_list_begin`) in one API call, writing a handle list to
+ `out_list` and its size to `out_count` (same ownership rules as the
+ `_list`/`_search` functions). RIDs not found are omitted, and results
+ arrive sorted by RID — NOT in input order — so match entries by
+ `nominal_dataset_rid`, never by index. The RID list is not consumed.
+ */
+int32_t nominal_dataset_get_batch(int32_t client,
+                                  int32_t rid_list,
+                                  int32_t *out_list,
+                                  uint32_t *out_count);
+
+/*
  Writes the most recent error message into `buf` (capacity `cap`, in
  bytes) and stores the byte count needed (excluding the null terminator)
  in `out_needed`. Call after any function returns a non-zero code.
@@ -865,6 +911,36 @@ int32_t nominal_handle_list_get(int32_t list, int32_t index, int32_t *out_handle
  to their own `_free` function. Freeing twice returns an error.
  */
 int32_t nominal_handle_list_free(int32_t list);
+
+/*
+ Starts staging a list of RIDs for a `_get_batch` call. Add RIDs one at a
+ time with `nominal_rid_list_add`, pass the handle to any `_get_batch`
+ function (it is not consumed — one list can serve several calls), and
+ free it with `nominal_rid_list_free`.
+ */
+int32_t nominal_rid_list_begin(int32_t *out_list);
+
+/*
+ Appends one RID to a staged RID list (repeatable; duplicates are kept).
+ */
+int32_t nominal_rid_list_add(int32_t list, const char *rid);
+
+/*
+ Frees a RID-list staging handle. Freeing twice returns an error.
+ */
+int32_t nominal_rid_list_free(int32_t list);
+
+/*
+ Debug aid: writes a report of every handle type that currently has open
+ (un-freed) handles into `buf`, one line per type —
+ `AssetHandle: 2 (17, 24)` — sorted by type name, with the open handle
+ values in parentheses. Writes an empty string when nothing is open, so
+ "needed == 0" at the end of a program means every handle was freed.
+ Same buffer convention as every other string getter. Handle values are
+ unique across all types (one shared counter), so a reported value
+ identifies the leaked handle unambiguously.
+ */
+int32_t nominal_debug_open_handles(char *buf, uint32_t cap, uint32_t *out_needed);
 
 /*
  Starts staging options for a CSV or Parquet ingest. Set the (required)
@@ -1611,6 +1687,19 @@ int32_t nominal_run_data_source_rid_at(int32_t run,
 int32_t nominal_run_data_source_type_at(int32_t run, int32_t index, int32_t *out_type);
 
 /*
+ Fetches every run named in the `rid_list` staging handle (see
+ `nominal_rid_list_begin`) in one API call, writing a handle list to
+ `out_list` and its size to `out_count` (same ownership rules as the
+ `_list`/`_search` functions). RIDs not found are omitted, and results
+ arrive sorted by RID — NOT in input order — so match entries by
+ `nominal_run_rid`, never by index. The RID list is not consumed.
+ */
+int32_t nominal_run_get_batch(int32_t client,
+                              int32_t rid_list,
+                              int32_t *out_list,
+                              uint32_t *out_count);
+
+/*
  Fetches the template with the given RID (latest commit on the main
  branch), writing its handle to `out_template`. Free with
  `nominal_template_free`.
@@ -1930,6 +2019,19 @@ int32_t nominal_video_label_at(int32_t video,
                                uint32_t *out_needed);
 
 /*
+ Fetches every video named in the `rid_list` staging handle (see
+ `nominal_rid_list_begin`) in one API call, writing a handle list to
+ `out_list` and its size to `out_count` (same ownership rules as the
+ `_list`/`_search` functions). RIDs not found are omitted, and results
+ arrive sorted by RID — NOT in input order — so match entries by
+ `nominal_video_rid`, never by index. The RID list is not consumed.
+ */
+int32_t nominal_video_get_batch(int32_t client,
+                                int32_t rid_list,
+                                int32_t *out_list,
+                                uint32_t *out_count);
+
+/*
  Fetches the workbook with the given RID, writing its handle to
  `out_workbook`. Free with `nominal_workbook_free`.
  */
@@ -2135,6 +2237,19 @@ int32_t nominal_workbook_label_at(int32_t workbook,
                                   char *buf,
                                   uint32_t cap,
                                   uint32_t *out_needed);
+
+/*
+ Fetches every workbook named in the `rid_list` staging handle (see
+ `nominal_rid_list_begin`) in one API call, writing a handle list to
+ `out_list` and its size to `out_count` (same ownership rules as the
+ `_list`/`_search` functions). RIDs not found are omitted, and results
+ arrive sorted by RID — NOT in input order — so match entries by
+ `nominal_workbook_rid`, never by index. The RID list is not consumed.
+ */
+int32_t nominal_workbook_get_batch(int32_t client,
+                                   int32_t rid_list,
+                                   int32_t *out_list,
+                                   uint32_t *out_count);
 
 /*
  Lists the workspaces the authenticated user can access (sorted by display

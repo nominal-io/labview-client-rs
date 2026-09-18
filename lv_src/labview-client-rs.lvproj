@@ -15,6 +15,7 @@
 		<Property Name="specify.custom.address" Type="Bool">false</Property>
 		<Item Name="dev" Type="Folder">
 			<Item Name="scripting.vi" Type="VI" URL="../dev/scripting.vi"/>
+			<Item Name="handle tracker.vi" Type="VI" URL="../dev/handle tracker.vi"/>
 		</Item>
 		<Item Name="tests" Type="Folder">
 			<Item Name="01 - Offline client lifecycle.vi" Type="VI" URL="../tests/01 - Offline client lifecycle.vi"/>
@@ -28,6 +29,7 @@
 			<Item Name="09 - Workbook from template.vi" Type="VI" URL="../tests/09 - Workbook from template.vi"/>
 			<Item Name="10 - Who am I.vi" Type="VI" URL="../tests/10 - Who am I.vi"/>
 			<Item Name="11 - Workspace discovery.vi" Type="VI" URL="../tests/11 - Workspace discovery.vi"/>
+			<Item Name="12 - Data-source attach.vi" Type="VI" URL="../tests/12 - Data-source attach.vi"/>
 		</Item>
 		<Item Name="client.lvlib" Type="Library" URL="../client/client.lvlib"/>
 		<Item Name="Dependencies" Type="Dependencies">
