@@ -1,4 +1,4 @@
-﻿//! Tier 2 for datasets: request-building + response-parsing + FFI conversion
+//! Tier 2 for datasets: request-building + response-parsing + FFI conversion
 //! against a wiremock server speaking the Conjure wire format. Mirrors the
 //! asset suite; the `EnrichedDataset` response shape (with its required
 //! nested objects) is the dataset-specific ground covered here.
@@ -465,4 +465,49 @@ fn dataset_calls_reject_invalid_handles() {
     );
     let err = read_string(|b, c, n| nominal_dataset_name(999_999_999, b, c, n)).unwrap_err();
     assert_eq!(err, NominalErrorCode::InvalidHandle as i32);
+}
+
+use nominal_ffi::dataset::nominal_dataset_get_batch;
+use nominal_ffi::handles::{nominal_rid_list_add, nominal_rid_list_begin, nominal_rid_list_free};
+
+#[test]
+fn get_batch_returns_handles_sorted_by_rid() {
+    let rid_b = DATASET_RID.replace("0002", "0006");
+    let server = start_server();
+    mount(
+        &server,
+        Mock::given(method("POST"))
+            .and(path("/catalog/v1/datasets/multiple"))
+            .and(body_partial_json(
+                json!({"datasetRids": [DATASET_RID, rid_b]}),
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+                minimal_dataset_json(&rid_b, "Bravo"),
+                minimal_dataset_json(DATASET_RID, "Alpha"),
+            ]))),
+    );
+    let client = new_client(&server);
+
+    let mut rid_list = 0i32;
+    assert_eq!(nominal_rid_list_begin(&mut rid_list), 0);
+    for rid in [DATASET_RID, rid_b.as_str()] {
+        let rid = cstr(rid);
+        assert_eq!(nominal_rid_list_add(rid_list, rid.as_ptr()), 0);
+    }
+
+    let mut list = 0i32;
+    let mut count = 0u32;
+    let code = nominal_dataset_get_batch(client, rid_list, &mut list, &mut count);
+    assert_eq!(code, 0, "get_batch failed: {}", last_error());
+    assert_eq!(count, 2);
+
+    let mut handle = 0i32;
+    assert_eq!(nominal_handle_list_get(list, 0, &mut handle), 0);
+    let rid0 = read_string(|b, c, n| nominal_dataset_rid(handle, b, c, n)).unwrap();
+    assert_eq!(rid0, DATASET_RID);
+    nominal_dataset_free(handle);
+
+    assert_eq!(nominal_handle_list_free(list), 0);
+    assert_eq!(nominal_rid_list_free(rid_list), 0);
+    nominal_client_free(client);
 }

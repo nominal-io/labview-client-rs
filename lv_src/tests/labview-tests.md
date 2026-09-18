@@ -21,6 +21,8 @@ run. Status as of 2026-08-08:
 | 14. Video ingest | video upload VI, f64 start time, video-RID job result | NOT YET RUN |
 | 15. Ingest into new dataset | csv new-dataset VI, create staging reuse, result RID = created dataset | NOT YET RUN |
 | 16. Run attachments | add/remove attachment VIs against a pre-uploaded attachment | NOT YET RUN |
+| 17. Batch get | rid-list staging VIs, one-call multi-fetch, sorted-not-input order | NOT YET RUN |
+| 18. Profile auth | from-profile / from-profile-env constructors against the CLI config | NOT YET RUN |
 
 Re-run all three after any re-import, and after any DLL change that touches
 signatures.
@@ -562,3 +564,43 @@ shows.
    non-zero error; `nominal last error.vi` names the failure.
 7. Cleanup: archive the test run, free the run handle,
    `nominal client free.vi`.
+
+## Test 17 — Batch get (NOT YET RUN)
+
+One RID list, one network call, many handles. Uses the assets from earlier
+tests (any two existing asset RIDs work); the same rid-list VIs drive
+`run/dataset/video/workbook get batch.vi` identically, so asset coverage
+proves the pattern.
+
+1. `nominal client new.vi` — real token.
+2. `nominal rid list begin.vi` → list handle; `nominal rid list add.vi`
+   twice with two known asset RIDs (add them in REVERSE lexical order on
+   purpose).
+3. `nominal asset get batch.vi` — client, rid list → handle list + count 2.
+4. Read both entries with `nominal handle list get.vi` (index 0, 1) →
+   `nominal asset rid.vi` on each. KEY CHECK: results are sorted by RID,
+   NOT in the order added in step 2 — wire the match-up by RID, never by
+   index.
+5. `nominal asset name.vi` on each handle → correct names.
+6. Add a third, made-up-but-well-formed RID
+   (`ri.scout.<instance>.asset.00000000-0000-0000-0000-00000000dead`) to
+   the SAME list and call step 3 again → error 0, count still 2 — unknown
+   RIDs are silently omitted, not errors.
+7. Cleanup: free each asset handle, the handle list from each call, the rid
+   list, `nominal client free.vi`.
+
+## Test 18 — Profile auth (NOT YET RUN)
+
+Requires a `~/.config/nominal/config.yml` written by the `nominal` CLI
+(`nominal auth login` / `nominal config`), with at least one named profile.
+
+1. `nominal client new from profile.vi` — your profile's name → error 0,
+   client handle. `nominal client base url.vi` matches the profile's URL.
+2. Prove it works end-to-end: `nominal asset list.vi` on that client →
+   count > 0.
+3. Set `NOMINAL_PROFILE=<same name>` in the environment LabVIEW was
+   launched from (restart LabVIEW if needed — it inherits the launcher's
+   environment), then `nominal client new from profile env.vi` → error 0.
+4. Negative: `nominal client new from profile.vi` with name `no-such-profile`
+   → non-zero; `nominal last error.vi` names the profile or the config file.
+5. Cleanup: free both client handles.

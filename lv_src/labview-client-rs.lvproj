@@ -22,6 +22,7 @@
 			<Item Name="scripting.vi" Type="VI" URL="../dev/scripting.vi"/>
 			<Item Name="buffer_template.vi" Type="VI" URL="../dev/buffer_template.vi"/>
 			<Item Name="template.vi" Type="VI" URL="../dev/template.vi"/>
+			<Item Name="handle tracker.vi" Type="VI" URL="../dev/handle tracker.vi"/>
 		</Item>
 		<Item Name="tests" Type="Folder">
 			<Item Name="01 - Offline client lifecycle.vi" Type="VI" URL="../tests/01 - Offline client lifecycle.vi"/>
@@ -44,6 +45,7 @@
 			<Item Name="10 - Who am I.vi" Type="VI" URL="../tests/10 - Who am I.vi"/>
 			<Item Name="10 LV - Who am I.vi" Type="VI" URL="../tests/10 LV - Who am I.vi"/>
 			<Item Name="11 - Workspace discovery.vi" Type="VI" URL="../tests/11 - Workspace discovery.vi"/>
+			<Item Name="12 - Data-source attach.vi" Type="VI" URL="../tests/12 - Data-source attach.vi"/>
 			<Item Name="labview-tests.md" Type="Document" URL="../tests/labview-tests.md"/>
 			<Item Name="test.csv" Type="Document" URL="../tests/test.csv"/>
 		</Item>

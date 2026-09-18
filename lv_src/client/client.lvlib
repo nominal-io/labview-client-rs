@@ -31,6 +31,7 @@
 	<Item Name="nominal asset data source type at.vi" Type="VI" URL="../VIs/nominal asset data source type at.vi"/>
 	<Item Name="nominal asset description.vi" Type="VI" URL="../VIs/nominal asset description.vi"/>
 	<Item Name="nominal asset free.vi" Type="VI" URL="../VIs/nominal asset free.vi"/>
+	<Item Name="nominal asset get batch.vi" Type="VI" URL="../VIs/nominal asset get batch.vi"/>
 	<Item Name="nominal asset get.vi" Type="VI" URL="../VIs/nominal asset get.vi"/>
 	<Item Name="nominal asset label at.vi" Type="VI" URL="../VIs/nominal asset label at.vi"/>
 	<Item Name="nominal asset label count.vi" Type="VI" URL="../VIs/nominal asset label count.vi"/>
@@ -63,6 +64,8 @@
 	<Item Name="nominal channel unit.vi" Type="VI" URL="../VIs/nominal channel unit.vi"/>
 	<Item Name="nominal client base url.vi" Type="VI" URL="../VIs/nominal client base url.vi"/>
 	<Item Name="nominal client free.vi" Type="VI" URL="../VIs/nominal client free.vi"/>
+	<Item Name="nominal client new from profile env.vi" Type="VI" URL="../VIs/nominal client new from profile env.vi"/>
+	<Item Name="nominal client new from profile.vi" Type="VI" URL="../VIs/nominal client new from profile.vi"/>
 	<Item Name="nominal client new.vi" Type="VI" URL="../VIs/nominal client new.vi"/>
 	<Item Name="nominal client workspace rid.vi" Type="VI" URL="../VIs/nominal client workspace rid.vi"/>
 	<Item Name="nominal dataset archive.vi" Type="VI" URL="../VIs/nominal dataset archive.vi"/>
@@ -77,6 +80,7 @@
 	<Item Name="nominal dataset created at.vi" Type="VI" URL="../VIs/nominal dataset created at.vi"/>
 	<Item Name="nominal dataset description.vi" Type="VI" URL="../VIs/nominal dataset description.vi"/>
 	<Item Name="nominal dataset free.vi" Type="VI" URL="../VIs/nominal dataset free.vi"/>
+	<Item Name="nominal dataset get batch.vi" Type="VI" URL="../VIs/nominal dataset get batch.vi"/>
 	<Item Name="nominal dataset get.vi" Type="VI" URL="../VIs/nominal dataset get.vi"/>
 	<Item Name="nominal dataset label at.vi" Type="VI" URL="../VIs/nominal dataset label at.vi"/>
 	<Item Name="nominal dataset label count.vi" Type="VI" URL="../VIs/nominal dataset label count.vi"/>
@@ -97,6 +101,7 @@
 	<Item Name="nominal dataset update set property.vi" Type="VI" URL="../VIs/nominal dataset update set property.vi"/>
 	<Item Name="nominal dataset update.vi" Type="VI" URL="../VIs/nominal dataset update.vi"/>
 	<Item Name="nominal dataset url.vi" Type="VI" URL="../VIs/nominal dataset url.vi"/>
+	<Item Name="nominal debug open handles.vi" Type="VI" URL="../VIs/nominal debug open handles.vi"/>
 	<Item Name="nominal handle list count.vi" Type="VI" URL="../VIs/nominal handle list count.vi"/>
 	<Item Name="nominal handle list free.vi" Type="VI" URL="../VIs/nominal handle list free.vi"/>
 	<Item Name="nominal handle list get.vi" Type="VI" URL="../VIs/nominal handle list get.vi"/>
@@ -143,6 +148,9 @@
 	<Item Name="nominal ingest video new.vi" Type="VI" URL="../VIs/nominal ingest video new.vi"/>
 	<Item Name="nominal ingest video.vi" Type="VI" URL="../VIs/nominal ingest video.vi"/>
 	<Item Name="nominal last error.vi" Type="VI" URL="../VIs/nominal last error.vi"/>
+	<Item Name="nominal rid list add.vi" Type="VI" URL="../VIs/nominal rid list add.vi"/>
+	<Item Name="nominal rid list begin.vi" Type="VI" URL="../VIs/nominal rid list begin.vi"/>
+	<Item Name="nominal rid list free.vi" Type="VI" URL="../VIs/nominal rid list free.vi"/>
 	<Item Name="nominal run add attachment.vi" Type="VI" URL="../VIs/nominal run add attachment.vi"/>
 	<Item Name="nominal run add connection.vi" Type="VI" URL="../VIs/nominal run add connection.vi"/>
 	<Item Name="nominal run add dataset.vi" Type="VI" URL="../VIs/nominal run add dataset.vi"/>
@@ -167,6 +175,7 @@
 	<Item Name="nominal run description.vi" Type="VI" URL="../VIs/nominal run description.vi"/>
 	<Item Name="nominal run end.vi" Type="VI" URL="../VIs/nominal run end.vi"/>
 	<Item Name="nominal run free.vi" Type="VI" URL="../VIs/nominal run free.vi"/>
+	<Item Name="nominal run get batch.vi" Type="VI" URL="../VIs/nominal run get batch.vi"/>
 	<Item Name="nominal run get.vi" Type="VI" URL="../VIs/nominal run get.vi"/>
 	<Item Name="nominal run label at.vi" Type="VI" URL="../VIs/nominal run label at.vi"/>
 	<Item Name="nominal run label count.vi" Type="VI" URL="../VIs/nominal run label count.vi"/>
@@ -217,6 +226,7 @@
 	<Item Name="nominal video created at.vi" Type="VI" URL="../VIs/nominal video created at.vi"/>
 	<Item Name="nominal video description.vi" Type="VI" URL="../VIs/nominal video description.vi"/>
 	<Item Name="nominal video free.vi" Type="VI" URL="../VIs/nominal video free.vi"/>
+	<Item Name="nominal video get batch.vi" Type="VI" URL="../VIs/nominal video get batch.vi"/>
 	<Item Name="nominal video get.vi" Type="VI" URL="../VIs/nominal video get.vi"/>
 	<Item Name="nominal video label at.vi" Type="VI" URL="../VIs/nominal video label at.vi"/>
 	<Item Name="nominal video label count.vi" Type="VI" URL="../VIs/nominal video label count.vi"/>
@@ -250,6 +260,7 @@
 	<Item Name="nominal workbook created at.vi" Type="VI" URL="../VIs/nominal workbook created at.vi"/>
 	<Item Name="nominal workbook description.vi" Type="VI" URL="../VIs/nominal workbook description.vi"/>
 	<Item Name="nominal workbook free.vi" Type="VI" URL="../VIs/nominal workbook free.vi"/>
+	<Item Name="nominal workbook get batch.vi" Type="VI" URL="../VIs/nominal workbook get batch.vi"/>
 	<Item Name="nominal workbook get.vi" Type="VI" URL="../VIs/nominal workbook get.vi"/>
 	<Item Name="nominal workbook label at.vi" Type="VI" URL="../VIs/nominal workbook label at.vi"/>
 	<Item Name="nominal workbook label count.vi" Type="VI" URL="../VIs/nominal workbook label count.vi"/>
