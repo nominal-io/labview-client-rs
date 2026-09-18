@@ -280,5 +280,4 @@
 	<Item Name="nominal workspace free.vi" Type="VI" URL="../VIs/nominal workspace free.vi"/>
 	<Item Name="nominal workspace list.vi" Type="VI" URL="../VIs/nominal workspace list.vi"/>
 	<Item Name="nominal workspace rid.vi" Type="VI" URL="../VIs/nominal workspace rid.vi"/>
-	<Item Name="nominalClient_64.dll" Type="Document" URL="../nominalClient_64.dll"/>
 </Library>
