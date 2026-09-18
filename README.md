@@ -1,3 +1,8 @@
+![Status](https://img.shields.io/badge/status-alpha-orange)
+
+> ⚠️ **Under Active Development**
+> This project is still in early development. APIs, interfaces, and behavior may change without notice. Use at your own risk in production environments, and expect breaking changes until a stable `1.0.0` release.
+
 # nominal-labview
 
 A LabVIEW client for [Nominal](https://nominal.io), built on top of
