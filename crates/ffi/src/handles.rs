@@ -144,6 +144,9 @@ pub(crate) use {handle_registry, lookup_handle};
 ///
 /// Wraps from `i32::MAX` back to 1, never issuing 0 (reserved as
 /// "null"/"absent") or negatives.
+// `fetch_update` is deprecated (renamed `try_update`) on newer stable Rust, but
+// `try_update` doesn't exist on older toolchains — keep building on both.
+#[allow(deprecated)]
 pub(crate) fn next_handle() -> i32 {
     use std::sync::atomic::{AtomicI32, Ordering};
     static NEXT: AtomicI32 = AtomicI32::new(1);
